@@ -9,3 +9,6 @@ __pycache__/
 build/
 dist/
 *.egg-info/
+/topic_notes/*.md
+/documents/*
+!/documents/.gitkeep

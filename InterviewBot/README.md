@@ -2,10 +2,16 @@
 
 InterviewBot is a browser-based voice interview practice app that uses
 OpenAI GPT-Live for voice conversation and WebRTC, and delegates interview
-reasoning to GPT-6 Luna. Luna uses the conversation and each answer to create
-the next contextual interview question; GPT-Live speaks it and handles
-turn-taking and interruptions. The app does not score answers or make hiring
-decisions.
+reasoning to GPT-6 Luna. The interviewer first asks what topic the candidate
+wants to discuss and their preferred level. Luna uses the conversation and
+each answer to create the next contextual interview question. It searches the
+local document collection first and judges whether retrieved passages
+adequately cover the topic and current question. It uses those documents when
+sufficient and researches the web only when the local material is missing or
+inadequate. Newly researched notes are saved as a PDF in `documents/` and as a
+cited Markdown file in `topic_notes/`. GPT-Live speaks the exchange and
+handles turn-taking and interruptions. The app does not score answers or make
+hiring decisions.
 
 ## Features
 
@@ -14,6 +20,9 @@ decisions.
   interview planning delegated to GPT-6 Luna.
 - Pause and resume the interview without ending the session.
 - Displays live interviewer and candidate transcripts in the browser.
+- Searches local PDF, DOCX, Markdown, and TXT documents before using web search.
+- Saves newly researched topic notes as a PDF in `documents/` and a Markdown
+  copy in `topic_notes/`, then retrieves their passages in later interviews.
 - Keeps the conversation context during the session so follow-up questions can
   reflect your answers.
 - Keeps the API key on the Python server; the browser never receives it.
@@ -88,8 +97,17 @@ InterviewBot/
 │   ├── app.js
 │   ├── index.html
 │   └── styles.css
+├── documents/            # Add local PDF, DOCX, Markdown, or TXT reference files
+├── topic_notes/          # Generated Markdown notes and citations
 └── tests/
 ```
+
+Files in `documents/` are local to your machine and ignored by Git. Put
+reference material there before starting an interview. The agent searches
+these files and previously generated notes first; it calls web search only
+when it judges that the available passages cannot support the discussion.
+New web-researched topic briefs are saved both as a PDF in `documents/` and
+as a cited Markdown file in `topic_notes/`.
 
 ## Tests
 

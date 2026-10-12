@@ -44,19 +44,79 @@ function addTranscriptFragment(speaker, fragment) {
   transcript.scrollTop = transcript.scrollHeight;
 }
 
+async function handleDelegatedResponseEvent(envelope) {
+  const event = envelope.event;
+  if (
+    event?.type !== "response.output_item.done" ||
+    event.item?.type !== "function_call"
+  ) {
+    return;
+  }
+
+  const { item } = event;
+  let toolOutput;
+  try {
+    const args = JSON.parse(item.arguments);
+    if (item.name === "prepare_topic_notes") {
+      const topic = typeof args.topic === "string" ? args.topic : "this topic";
+      eventChannel.send(JSON.stringify({
+        type: "session.commentary.append",
+        delegation_id: null,
+        content: `I couldn't find enough material in the available documents for ${topic}. Let me research it and prepare a short, sourced document, then we'll continue.`,
+      }));
+      setStatus(`Researching and preparing notes on ${topic}…`);
+    } else if (item.name === "search_documents") {
+      setStatus("Searching available documents…");
+    }
+
+    const response = await fetch("/api/tool", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name: item.name, arguments: args }),
+    });
+    const result = await response.json();
+    if (!response.ok) {
+      throw new Error(result.error || "The topic-notes operation failed.");
+    }
+    toolOutput = result.result;
+    if (item.name === "prepare_topic_notes") {
+      setStatus("Document prepared; the interviewer is reviewing it…", "active");
+    }
+  } catch (error) {
+    toolOutput = JSON.stringify({
+      error: error.message || "The topic-notes operation failed.",
+    });
+    setStatus(error.message || "The topic-notes operation failed.", "error");
+  }
+
+  if (eventChannel?.readyState !== "open") return;
+  eventChannel.send(JSON.stringify({
+    type: "response.item.create",
+    item: {
+      type: "function_call_output",
+      call_id: item.call_id,
+      output: toolOutput,
+    },
+  }));
+  eventChannel.send(JSON.stringify({ type: "response.create" }));
+}
+
 function handleServerEvent(event) {
-  if (event.type === "session.started") {
+  if (event.type === "response.event") {
+    void handleDelegatedResponseEvent(event);
+  } else if (event.type === "session.started") {
     setStatus("Connected — the interviewer is starting", "active");
     pauseButton.disabled = false;
     stopButton.disabled = false;
     eventChannel.send(JSON.stringify({
       type: "session.instructions.append",
       delegation_id: null,
-      content: "The candidate has joined. Delegate to the configured Responses backend now for the opening interview turn. Speak its result: briefly welcome them, ask what role they are preparing for, and ask for a short summary of their experience. Then stop and listen. For every later candidate turn, delegate before replying and speak the backend's response without inventing or replacing its interview question.",
+      content: "The candidate has joined. Delegate to the configured Responses backend now for the opening interview turn. Speak its result: briefly welcome them, ask what topic they want to discuss and their preferred level, then stop and listen. For every later candidate turn, delegate before replying and speak the backend's response without inventing or replacing its interview question.",
     }));
   } else if (event.type === "session.input_transcript.delta") {
     addTranscriptFragment("candidate", event.delta);
   } else if (event.type === "session.output_transcript.delta") {
+    setStatus("Interview in progress", "active");
     addTranscriptFragment("assistant", event.delta);
   } else if (event.type === "session.instructions.appended") {
     setStatus("Interview in progress", "active");

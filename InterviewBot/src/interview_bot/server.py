@@ -2,16 +2,70 @@ import json
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import cast
 
 from openai import APIError, OpenAI
 from openai.types.live.media_session_config_param import MediaSessionConfigParam
 
 from interview_bot.config import Settings
+from interview_bot.topic_notes import (
+    DOCUMENTS_DIR,
+    prepare_topic_notes,
+    search_documents,
+)
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
+NOTES_DIR = Path(__file__).resolve().parents[2] / "topic_notes"
 HOST = "127.0.0.1"
 PORT = 8000
 MAX_REQUEST_BYTES = 65_536
+MAX_TOOL_REQUEST_BYTES = 8_192
+
+TOPIC_NOTE_TOOLS = [
+    {
+        "type": "function",
+        "name": "search_documents",
+        "description": (
+            "Search the local documents folder and saved topic notes for "
+            "passages relevant to the selected topic and current question. "
+            "Call this before answering. Judge whether the returned passages "
+            "adequately support a useful answer and question. If there are "
+            "no passages or they are insufficient, call prepare_topic_notes."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string"},
+                "query": {"type": "string"},
+            },
+            "required": ["topic", "query"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+    {
+        "type": "function",
+        "name": "prepare_topic_notes",
+        "description": (
+            "Research a topic with web search and GPT-6 Luna, write short "
+            "sourced notes, save a PDF in the documents folder and a Markdown "
+            "copy in topic_notes, and return the notes. Call only when the "
+            "available local documents are missing or insufficient."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "topic": {"type": "string"},
+                "candidate_context": {
+                    "type": "string",
+                },
+            },
+            "required": ["topic", "candidate_context"],
+            "additionalProperties": False,
+        },
+        "strict": True,
+    },
+]
 
 
 def build_session_config(settings: Settings) -> MediaSessionConfigParam:
@@ -26,15 +80,49 @@ def build_session_config(settings: Settings) -> MediaSessionConfigParam:
                 "instructions": settings.reasoning_instructions,
                 "reasoning": {"effort": "medium"},
                 "max_output_tokens": 256,
+                "tools": TOPIC_NOTE_TOOLS,
+                "parallel_tool_calls": False,
             },
         },
     }
+
+
+def execute_topic_tool(
+    name: object,
+    arguments: object,
+    client: OpenAI,
+    settings: Settings,
+    notes_dir: Path = NOTES_DIR,
+    documents_dir: Path = DOCUMENTS_DIR,
+) -> dict[str, object]:
+    if not isinstance(arguments, dict):
+        raise TypeError("Tool arguments must be a JSON object.")
+
+    if name == "search_documents":
+        return search_documents(
+            topic=cast(str, arguments.get("topic")),
+            query=cast(str, arguments.get("query")),
+            notes_dir=notes_dir,
+            documents_dir=documents_dir,
+        )
+    if name == "prepare_topic_notes":
+        return prepare_topic_notes(
+            client=client,
+            settings=settings,
+            topic=cast(str, arguments.get("topic")),
+            candidate_context=cast(str, arguments.get("candidate_context")),
+            notes_dir=notes_dir,
+            documents_dir=documents_dir,
+        )
+    raise ValueError("Unsupported topic-notes tool.")
 
 
 def make_handler(
     settings: Settings,
     client: OpenAI,
     allowed_origins: set[str],
+    notes_dir: Path = NOTES_DIR,
+    documents_dir: Path = DOCUMENTS_DIR,
 ) -> type[BaseHTTPRequestHandler]:
     class InterviewBotHandler(BaseHTTPRequestHandler):
         def _reply(self, status: int, content_type: str, body: bytes) -> None:
@@ -69,26 +157,75 @@ def make_handler(
             self._reply(200, content_type, content)
 
         def do_POST(self) -> None:
-            if self.path != "/api/session":
+            if self.path not in {"/api/session", "/api/tool"}:
                 self._reply_json(404, {"error": "Not found"})
                 return
             if self.headers.get("Origin") not in allowed_origins:
                 self._reply_json(403, {"error": "Unexpected request origin"})
                 return
 
+            max_length = (
+                MAX_REQUEST_BYTES
+                if self.path == "/api/session"
+                else MAX_TOOL_REQUEST_BYTES
+            )
             try:
                 length = int(self.headers.get("Content-Length", "0"))
             except ValueError:
                 length = 0
-            if not 0 < length <= MAX_REQUEST_BYTES:
-                self._reply_json(400, {"error": "An SDP offer is required"})
+            if not 0 < length <= max_length:
+                self._reply_json(400, {"error": "Request body is missing or too large"})
                 return
 
             try:
                 payload = json.loads(self.rfile.read(length))
             except (UnicodeDecodeError, json.JSONDecodeError):
-                self._reply_json(400, {"error": "An SDP offer is required"})
+                self._reply_json(400, {"error": "Request body must be valid JSON"})
                 return
+
+            if self.path == "/api/tool":
+                try:
+                    result = execute_topic_tool(
+                        name=payload.get("name") if isinstance(payload, dict) else None,
+                        arguments=(
+                            payload.get("arguments")
+                            if isinstance(payload, dict)
+                            else None
+                        ),
+                        client=client,
+                        settings=settings,
+                        notes_dir=notes_dir,
+                        documents_dir=documents_dir,
+                    )
+                except (TypeError, ValueError) as error:
+                    self._reply_json(400, {"error": str(error)})
+                    return
+                except APIError as error:
+                    status = error.status_code
+                    if status is None or not 400 <= status < 600:
+                        status = 502
+                    print(
+                        f"Topic-notes API request failed (HTTP {status}).",
+                        file=sys.stderr,
+                    )
+                    self._reply_json(
+                        status,
+                        {"error": "Could not research this topic right now."},
+                    )
+                    return
+                except (OSError, RuntimeError) as error:
+                    print(f"Topic-notes operation failed: {error}", file=sys.stderr)
+                    self._reply_json(
+                        502,
+                        {"error": "Could not prepare or read the topic notes."},
+                    )
+                    return
+                self._reply_json(
+                    200,
+                    {"result": json.dumps(result, ensure_ascii=False)},
+                )
+                return
+
             sdp = payload.get("sdp") if isinstance(payload, dict) else None
             if not isinstance(sdp, str) or not sdp.strip():
                 self._reply_json(400, {"error": "An SDP offer is required"})
