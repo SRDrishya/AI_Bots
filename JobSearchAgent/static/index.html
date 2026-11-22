@@ -1,0 +1,873 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Job Search Agent</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --text: #1d2330; --muted: #667085; --line: #e4e7ec;
+    --accent: #2f5fd0; --accent-soft: #e8eefc; --good: #137a4b; --good-soft: #e3f4ec;
+    --warn: #a15c07; --warn-soft: #fdf1df; --bad: #b42318; --bad-soft: #fde8e6;
+    --radius: 10px; --shadow: 0 1px 2px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101318; --panel: #181c23; --text: #e6e9ef; --muted: #98a2b3; --line: #2a303a;
+      --accent: #7da2ff; --accent-soft: #1f2a44; --good: #5fd39b; --good-soft: #15312a;
+      --warn: #f3b75b; --warn-soft: #3a2c14; --bad: #ff8a80; --bad-soft: #3c1d1b; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .bar { max-width: 1180px; margin: 0 auto; padding: 10px 20px; display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .brand { font-weight: 700; font-size: 16px; margin-right: 8px; }
+  nav { display: flex; gap: 4px; }
+  nav button { border: 0; background: none; padding: 6px 12px; border-radius: 8px; cursor: pointer; color: var(--muted); }
+  nav button.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+  .grow { flex: 1; }
+  .chips { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 1px 9px; border-radius: 999px;
+          font-size: 12px; background: var(--bg); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .chip.good { background: var(--good-soft); color: var(--good); border-color: transparent; }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+  .chip.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  main { max-width: 1180px; margin: 0 auto; padding: 20px; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 16px; margin-bottom: 16px; }
+  h2 { font-size: 15px; margin: 0 0 10px; }
+  .muted { color: var(--muted); }
+  .small { font-size: 12px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+  .btn { border: 1px solid var(--line); background: var(--panel); padding: 6px 12px; border-radius: 8px; cursor: pointer; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:disabled { opacity: .55; cursor: default; }
+  .btn.sm { padding: 2px 9px; font-size: 12px; }
+  .btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); font-weight: 600; }
+  input[type=text], input[type=time], input[type=number], select, textarea {
+    border: 1px solid var(--line); background: var(--bg); border-radius: 8px; padding: 6px 9px; }
+  textarea { width: 100%; resize: vertical; }
+  label.inline { display: inline-flex; gap: 6px; align-items: center; }
+  .field { display: flex; flex-direction: column; gap: 4px; }
+  .field > span { font-size: 12px; color: var(--muted); }
+  .profile-grid { display: grid; grid-template-columns: 1fr auto; gap: 12px; }
+  .drop { border: 2px dashed var(--line); border-radius: var(--radius); padding: 28px; text-align: center; cursor: pointer; }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .summary { display: flex; gap: 14px; flex-wrap: wrap; align-items: baseline; margin-bottom: 10px; }
+  .summary b { font-size: 18px; }
+  .job { display: grid; grid-template-columns: 56px 1fr; gap: 14px; padding: 14px 0; border-top: 1px solid var(--line); }
+  .job:first-child { border-top: 0; }
+  .score { width: 52px; height: 52px; border-radius: 12px; display: grid; place-items: center; font-weight: 700; font-size: 18px; }
+  .score.s-high { background: var(--good-soft); color: var(--good); }
+  .score.s-mid { background: var(--accent-soft); color: var(--accent); }
+  .score.s-low { background: var(--bg); color: var(--muted); }
+  .score small { display: block; font-size: 9px; font-weight: 500; margin-top: -6px; opacity: .8; }
+  .job h3 { margin: 0; font-size: 15px; }
+  .job h3 a { color: var(--text); text-decoration: none; }
+  .job h3 a:hover { color: var(--accent); text-decoration: underline; }
+  .meta { color: var(--muted); font-size: 13px; display: flex; gap: 10px; flex-wrap: wrap; margin: 2px 0 6px; }
+  .reason { margin: 4px 0 6px; }
+  .skills { display: flex; gap: 4px; flex-wrap: wrap; margin: 4px 0; }
+  .actions { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; align-items: center; }
+  details summary { cursor: pointer; color: var(--muted); font-size: 12px; }
+  .desc { white-space: pre-wrap; font-size: 13px; max-height: 320px; overflow: auto; background: var(--bg); padding: 10px; border-radius: 8px; margin-top: 6px; }
+  table { width: 100%; border-collapse: collapse; }
+  th, td { text-align: left; padding: 8px; border-top: 1px solid var(--line); vertical-align: top; }
+  th { font-size: 12px; color: var(--muted); font-weight: 600; border-top: 0; }
+  tr.click { cursor: pointer; }
+  tr.click:hover td { background: var(--bg); }
+  .tracker-item { border-top: 1px solid var(--line); padding: 12px 0; display: grid; grid-template-columns: 1fr 260px; gap: 12px; }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--bg);
+           padding: 9px 16px; border-radius: 8px; z-index: 20; max-width: 90vw; }
+  .toast.error { background: var(--bad); color: #fff; }
+  .spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid currentColor; border-right-color: transparent;
+             border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .empty { text-align: center; padding: 30px; color: var(--muted); }
+  a.btn { text-decoration: none; color: inherit; display: inline-block; }
+  dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text);
+           width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; }
+  dialog::backdrop { background: rgba(0,0,0,.45); }
+  .dlg-head { display: flex; gap: 10px; align-items: center; padding: 14px 18px; border-bottom: 1px solid var(--line);
+              position: sticky; top: 0; background: var(--panel); }
+  .dlg-body { padding: 16px 18px; }
+  .letter { white-space: pre-wrap; background: var(--bg); border-radius: 8px; padding: 14px; font-size: 14px; line-height: 1.6; }
+  .kit h4 { margin: 18px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .kit ul { margin: 0; padding-left: 20px; }
+  .kit li { margin: 4px 0; }
+  .hidden { display: none !important; }
+  @media (max-width: 720px) {
+    .tracker-item, .profile-grid { grid-template-columns: 1fr; }
+    .job { grid-template-columns: 44px 1fr; }
+    .score { width: 42px; height: 42px; font-size: 15px; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <span class="brand">Job Search Agent</span>
+    <nav id="tabs">
+      <button data-tab="matches" class="active">Matches</button>
+      <button data-tab="tracker">Tracker <span id="tracker-count" class="muted"></span></button>
+      <button data-tab="history">History</button>
+      <button data-tab="settings">Schedule &amp; sources</button>
+    </nav>
+    <span class="grow"></span>
+    <div id="header-chips" class="chips"></div>
+  </div>
+</header>
+
+<main>
+  <!-- ============================ MATCHES ============================ -->
+  <section id="tab-matches">
+    <div class="panel" id="profile-panel">
+      <div id="upload-box" class="drop hidden">
+        <div style="font-size:16px;font-weight:600">Upload your resume to get started</div>
+        <div class="muted">PDF, DOCX or TXT · drop it here or click to choose</div>
+      </div>
+      <div id="profile-view" class="hidden"></div>
+      <input type="file" id="file-input" accept=".pdf,.docx,.txt,.md" hidden>
+    </div>
+
+    <div class="panel" id="search-panel">
+      <div class="row">
+        <label class="field"><span>Location</span><input type="text" id="s-location" value="Chennai" size="12"></label>
+        <label class="field"><span>Custom query (optional, ; separated)</span><input type="text" id="s-query" size="28" placeholder="uses your profile's queries"></label>
+        <label class="field"><span>Max results</span><input type="number" id="s-max" value="50" min="5" max="200" style="width:80px"></label>
+        <label class="inline" style="margin-top:18px"><input type="checkbox" id="s-remote"> Remote only</label>
+        <span class="grow"></span>
+        <button class="btn primary" id="search-btn" style="margin-top:18px">Search now</button>
+      </div>
+    </div>
+
+    <div class="panel" id="results-panel">
+      <div class="row" style="margin-bottom:10px">
+        <label class="inline small muted">Show
+          <select id="view">
+            <option value="latest">Latest search</option>
+            <option value="1">Today — all searches combined</option>
+            <option value="3">Last 3 days — combined</option>
+            <option value="7">Last 7 days — combined</option>
+            <option value="14">Last 14 days — combined</option>
+            <option value="saved" hidden>A saved search (from History)</option>
+          </select>
+        </label>
+        <span class="small muted" id="view-note"></span>
+      </div>
+      <div id="results-head"></div>
+      <div class="row hidden" id="filter-row" style="margin-bottom:6px">
+        <div class="chips" id="filters">
+          <button class="btn sm on" data-filter="all">All</button>
+          <button class="btn sm" data-filter="new">New</button>
+          <button class="btn sm" data-filter="local">Chennai</button>
+          <button class="btn sm" data-filter="remote">Remote</button>
+          <button class="btn sm" data-filter="untracked">Not acted on</button>
+        </div>
+        <span class="grow"></span>
+        <label class="inline small muted">Sort
+          <select id="sort"><option value="score">Best match</option><option value="date">Newest</option></select>
+        </label>
+      </div>
+      <div id="jobs"></div>
+    </div>
+  </section>
+
+  <!-- ============================ TRACKER ============================ -->
+  <section id="tab-tracker" class="hidden">
+    <div class="panel">
+      <div class="row" style="margin-bottom:8px">
+        <h2 style="margin:0">Applications</h2>
+        <a class="btn sm" href="/api/tracker/export?format=xlsx">Export Excel</a>
+        <a class="btn sm" href="/api/tracker/export?format=csv">CSV</a>
+        <span class="grow"></span>
+        <div class="chips" id="tracker-filters"></div>
+      </div>
+      <div id="tracker-list"></div>
+    </div>
+  </section>
+
+  <!-- ============================ HISTORY ============================ -->
+  <section id="tab-history" class="hidden">
+    <div class="panel">
+      <h2>Search history <span class="muted small">(last 20 · click to open)</span></h2>
+      <div style="overflow-x:auto"><table id="history-table"></table></div>
+    </div>
+  </section>
+
+  <!-- ============================ SETTINGS ============================ -->
+  <section id="tab-settings" class="hidden">
+    <div class="panel">
+      <h2>Daily search</h2>
+      <p class="muted small" style="margin-top:0">Runs automatically while this app is running. If the app was closed at the scheduled time, it catches up shortly after you start it.</p>
+      <div class="row">
+        <label class="inline"><input type="checkbox" id="sc-enabled"> Enabled</label>
+        <label class="field"><span>Time (India)</span><input type="time" id="sc-time"></label>
+        <label class="field"><span>Location</span><input type="text" id="sc-location" size="12"></label>
+        <label class="field"><span>Max results</span><input type="number" id="sc-max" min="5" max="200" style="width:80px"></label>
+        <label class="inline" style="margin-top:18px"><input type="checkbox" id="sc-remote"> Remote only</label>
+        <span class="grow"></span>
+        <button class="btn" id="sc-save" style="margin-top:18px">Save</button>
+        <button class="btn primary" id="sc-run" style="margin-top:18px">Run now</button>
+      </div>
+      <div id="sc-state" class="small" style="margin-top:12px"></div>
+    </div>
+    <div class="panel">
+      <h2>Sources &amp; quota</h2>
+      <div style="overflow-x:auto"><table id="sources-table"></table></div>
+      <p class="muted small">API keys live in the <code>.env</code> file next to the app. Free quotas are read from the providers, so usage outside this app is counted too.</p>
+    </div>
+  </section>
+</main>
+
+<dialog id="kit-dialog">
+  <div class="dlg-head">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600" id="kit-title"></div>
+      <div class="small muted" id="kit-sub"></div>
+    </div>
+    <select id="kit-tone" title="Tone">
+      <option value="professional">Professional</option><option value="warm">Warm</option><option value="concise">Concise</option>
+    </select>
+    <button class="btn sm" id="kit-regen">Regenerate</button>
+    <button class="btn sm" id="kit-close" aria-label="Close">✕</button>
+  </div>
+  <div class="dlg-body kit" id="kit-body"></div>
+</dialog>
+
+<dialog id="co-dialog">
+  <div class="dlg-head">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600" id="co-title"></div>
+      <div class="small muted" id="co-sub"></div>
+    </div>
+    <button class="btn sm" id="co-refresh">Refresh</button>
+    <button class="btn sm" id="co-close" aria-label="Close">✕</button>
+  </div>
+  <div class="dlg-body kit">
+    <h4 style="margin-top:0">Check it yourself (live pages)</h4>
+    <div class="chips" id="co-links"></div>
+    <div id="co-body" style="margin-top:6px"></div>
+  </div>
+</dialog>
+
+<script>
+"use strict";
+// ---------------------------------------------------------------- helpers
+const $ = (sel, root = document) => root.querySelector(sel);
+const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];
+
+/** Build DOM safely: h("a", {href, class}, "text", childNode, ...). Never uses innerHTML. */
+function h(tag, attrs = {}, ...children) {
+  const el = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (v === null || v === undefined || v === false) continue;
+    if (k === "class") el.className = v;
+    else if (k.startsWith("on")) el.addEventListener(k.slice(2), v);
+    else if (k === "href") el.setAttribute("href", safeUrl(v));
+    else el.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of children.flat()) {
+    if (c === null || c === undefined || c === false) continue;
+    el.append(c instanceof Node ? c : document.createTextNode(String(c)));
+  }
+  return el;
+}
+function safeUrl(u) {
+  try { const url = new URL(u, location.href); return ["http:", "https:"].includes(url.protocol) ? url.href : "#"; }
+  catch { return "#"; }
+}
+function clear(el, ...children) { el.replaceChildren(...children.flat().filter(Boolean)); return el; }
+
+async function api(path, opts = {}) {
+  const init = { ...opts, headers: { ...(opts.body && !(opts.body instanceof FormData) ? { "Content-Type": "application/json" } : {}) } };
+  if (opts.body && !(opts.body instanceof FormData)) init.body = JSON.stringify(opts.body);
+  const res = await fetch(path, init);
+  if (res.status === 204) return null;
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const detail = Array.isArray(data.detail) ? data.detail.map(d => d.msg).join("; ") : data.detail;
+    throw Object.assign(new Error(detail || `Request failed (${res.status})`), { status: res.status });
+  }
+  return data;
+}
+
+let toastTimer;
+function toast(msg, isError = false) {
+  $(".toast")?.remove();
+  const t = h("div", { class: "toast" + (isError ? " error" : "") }, msg);
+  document.body.append(t);
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.remove(), isError ? 6000 : 2800);
+}
+
+function ago(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d)) return iso;
+  const s = (Date.now() - d) / 1000;
+  if (s < 3600) return "just now";
+  if (s < 86400) return `${Math.floor(s / 3600)}h ago`;
+  const days = Math.floor(s / 86400);
+  return days === 1 ? "yesterday" : days < 60 ? `${days} days ago` : d.toLocaleDateString();
+}
+const fmtDateTime = iso => iso ? new Date(iso).toLocaleString([], { dateStyle: "medium", timeStyle: "short" }) : "—";
+const SOURCE_LABEL = { remotive: "Remotive", arbeitnow: "Arbeitnow", himalayas: "Himalayas", jobicy: "Jobicy",
+  ats_boards: "Company boards", greenhouse: "Greenhouse", lever: "Lever", ashby: "Ashby",
+  adzuna: "Adzuna", jsearch: "JSearch", serpapi: "Google Jobs" };
+const EXCLUDE_LABEL = { remote_restricted: "remote but restricted to other countries", other_city: "other Indian cities",
+  other_country: "outside India", unknown_location: "no clear location", not_remote: "not remote", dismissed: "dismissed by you" };
+const STATUSES = ["saved", "applied", "interviewing", "offer", "rejected", "dismissed"];
+const STATUS_LABEL = { saved: "Saved", applied: "Applied", interviewing: "Interviewing", offer: "Offer", rejected: "Rejected", dismissed: "Dismissed" };
+
+// ---------------------------------------------------------------- state
+const state = { status: null, profile: null, search: null, filter: "all", sort: "score", trackerFilter: "active" };
+
+// ---------------------------------------------------------------- tabs
+$$("#tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
+function showTab(name) {
+  if (!$(`#tab-${name}`)) name = "matches";
+  const wanted = name === "matches" ? "" : `#${name}`;
+  if (location.hash !== wanted) history.replaceState(null, "", location.pathname + wanted);
+  $$("#tabs button").forEach(b => b.classList.toggle("active", b.dataset.tab === name));
+  $$("main > section").forEach(s => s.classList.toggle("hidden", s.id !== `tab-${name}`));
+  if (name === "tracker") loadTracker();
+  if (name === "history") loadHistory();
+  if (name === "settings") renderSettings();
+}
+
+// ---------------------------------------------------------------- status / header
+async function loadStatus() {
+  state.status = await api("/api/status");
+  renderHeader();
+  const n = Object.entries(state.status.tracker).filter(([s]) => s !== "dismissed").reduce((a, [, c]) => a + c, 0);
+  $("#tracker-count").textContent = n ? `(${n})` : "";
+}
+function quotaLeft(source) {
+  const q = state.status?.quota?.[source];
+  if (!q || q.remaining === undefined || q.remaining === null) return null;
+  if (q.reset_at && new Date(q.reset_at) <= new Date()) return null;
+  return q.remaining;
+}
+function renderHeader() {
+  const s = state.status, chips = [];
+  const sc = s.schedule;
+  if (sc.running) chips.push(h("span", { class: "chip accent" }, h("span", { class: "spinner" }), " Daily search running"));
+  else if (sc.settings.enabled) chips.push(h("span", { class: "chip", title: sc.state.last_message || "" },
+    `Next search ${new Date(sc.next_run_at).toLocaleString([], { weekday: "short", hour: "2-digit", minute: "2-digit" })}`));
+  else chips.push(h("span", { class: "chip warn" }, "Daily search off"));
+  for (const src of ["jsearch", "serpapi"]) {
+    const info = s.sources.find(x => x.name === src);
+    if (!info?.configured) continue;
+    const left = quotaLeft(src);
+    if (left !== null) chips.push(h("span", { class: "chip " + (left < 15 ? "warn" : ""), title: "Free API calls left" }, `${SOURCE_LABEL[src]}: ${left} left`));
+  }
+  if (!s.gemini_configured) chips.push(h("span", { class: "chip warn", title: "Add GEMINI_API_KEY to .env for AI scoring" }, "AI scoring off"));
+  clear($("#header-chips"), chips);
+}
+
+// ---------------------------------------------------------------- profile
+const dropBox = $("#upload-box"), fileInput = $("#file-input");
+dropBox.addEventListener("click", () => fileInput.click());
+dropBox.addEventListener("dragover", e => { e.preventDefault(); dropBox.classList.add("over"); });
+dropBox.addEventListener("dragleave", () => dropBox.classList.remove("over"));
+dropBox.addEventListener("drop", e => { e.preventDefault(); dropBox.classList.remove("over"); if (e.dataTransfer.files[0]) uploadResume(e.dataTransfer.files[0]); });
+fileInput.addEventListener("change", () => { if (fileInput.files[0]) uploadResume(fileInput.files[0]); fileInput.value = ""; });
+
+async function uploadResume(file) {
+  const view = $("#profile-view");
+  dropBox.classList.add("hidden"); view.classList.remove("hidden");
+  clear(view, h("div", { class: "muted" }, h("span", { class: "spinner" }), ` Reading ${file.name}… (AI analysis can take up to a minute)`));
+  const form = new FormData(); form.append("file", file);
+  try {
+    const res = await api("/api/resume", { method: "POST", body: form });
+    state.profile = res.profile; state.resumeFile = res.file;
+    toast(res.reused ? "Same resume as before — kept your saved profile (no AI re-analysis)" : "Resume analysed and saved");
+    await loadStatus();
+  } catch (e) { toast(e.message, true); }
+  renderProfile();
+}
+
+async function reanalyzeResume(btn) {
+  if (!btn.dataset.armed) {  // two-step confirm: this overwrites manual edits
+    btn.dataset.armed = "1"; btn.textContent = "Click again to confirm (overwrites edits)";
+    setTimeout(() => { if (btn.isConnected) { delete btn.dataset.armed; btn.textContent = "Re-analyse"; } }, 5000);
+    return;
+  }
+  btn.disabled = true; clear(btn, h("span", { class: "spinner" }), " Analysing…");
+  try {
+    const res = await api("/api/resume/reanalyze", { method: "POST" });
+    state.profile = res.profile; toast("Resume re-analysed");
+  } catch (e) { toast(e.message, true); }
+  renderProfile();
+}
+
+async function loadProfile() {
+  try { state.profile = await api("/api/profile"); } catch (e) { if (e.status !== 404) throw e; state.profile = null; }
+  try { state.resumeFile = await api("/api/resume"); } catch (e) { if (e.status !== 404) throw e; state.resumeFile = null; }
+  renderProfile();
+}
+
+function renderProfile(editing = false) {
+  const p = state.profile, view = $("#profile-view");
+  dropBox.classList.toggle("hidden", !!p); view.classList.toggle("hidden", !p);
+  $("#search-btn").disabled = !p;
+  if (!p) return;
+  if (editing) return renderProfileEditor(p, view);
+  const facts = [p.seniority, p.years_of_experience != null ? `${p.years_of_experience} yrs` : null,
+                 p.preferred_locations?.join(" / ")].filter(Boolean).join(" · ");
+  clear(view, h("div", { class: "profile-grid" },
+    h("div", {},
+      h("div", { class: "row" }, h("h2", { style: "margin:0" }, p.candidate_name || "Your profile"),
+        h("span", { class: "muted small" }, facts),
+        h("span", { class: "chip" + (p.analysis_engine === "gemini" ? " accent" : "") }, p.analysis_engine === "gemini" ? "AI-parsed" : p.analysis_engine)),
+      p.summary ? h("p", { class: "muted", style: "margin:6px 0" }, p.summary) : null,
+      h("div", { class: "skills" }, h("span", { class: "small muted" }, "Roles:"), p.target_roles.map(r => h("span", { class: "chip accent" }, r))),
+      h("div", { class: "skills" }, h("span", { class: "small muted" }, "Searches:"), p.search_queries.map(q => h("span", { class: "chip" }, q))),
+      h("details", {}, h("summary", {}, `${p.skills.length} skills`),
+        h("div", { class: "skills" }, p.skills.map(s => h("span", { class: "chip" }, s)))),
+      state.resumeFile ? h("div", { class: "small muted", style: "margin-top:6px" }, "Saved resume: ",
+        h("a", { href: "/api/resume/file" }, state.resumeFile.filename),
+        ` · uploaded ${new Date(state.resumeFile.uploaded_at).toLocaleDateString()} · analysed once, reused for every search`) : null),
+    h("div", { class: "row", style: "align-items:flex-start" },
+      h("button", { class: "btn sm", onclick: () => renderProfile(true) }, "Edit"),
+      h("button", { class: "btn sm", onclick: () => fileInput.click() }, "Upload new resume"),
+      state.resumeFile ? h("button", { class: "btn sm", title: "Run the AI analysis again on the saved resume",
+        onclick: e => reanalyzeResume(e.currentTarget) }, "Re-analyse") : null)));
+}
+
+function renderProfileEditor(p, view) {
+  const field = (label, value, id, rows = 2) => h("label", { class: "field" }, h("span", {}, label),
+    h("textarea", { id, rows }, value));
+  clear(view,
+    h("h2", {}, "Edit profile"), h("p", { class: "muted small", style: "margin-top:0" }, "Comma-separated. Searches use the queries; scoring uses roles and skills."),
+    h("div", { class: "row", style: "align-items:flex-start" },
+      h("label", { class: "field" }, h("span", {}, "Name"), h("input", { type: "text", id: "e-name", value: p.candidate_name })),
+      h("label", { class: "field" }, h("span", {}, "Years of experience"), h("input", { type: "number", id: "e-years", step: "0.5", min: "0", value: p.years_of_experience ?? "", style: "width:90px" })),
+      h("label", { class: "field" }, h("span", {}, "Seniority"),
+        h("select", { id: "e-seniority" }, ["", "Entry", "Junior", "Mid", "Senior", "Lead"].map(s => h("option", { value: s, selected: s === p.seniority }, s || "—"))))),
+    field("Target roles", p.target_roles.join(", "), "e-roles"),
+    field("Search queries", p.search_queries.join(", "), "e-queries"),
+    field("Skills", p.skills.join(", "), "e-skills", 3),
+    h("div", { class: "row", style: "margin-top:8px" },
+      h("button", { class: "btn primary", onclick: saveProfile }, "Save"),
+      h("button", { class: "btn", onclick: () => renderProfile() }, "Cancel")));
+}
+const splitList = v => v.split(/[,\n]/).map(s => s.trim()).filter(Boolean);
+async function saveProfile() {
+  const years = $("#e-years").value;
+  const updated = { ...state.profile, candidate_name: $("#e-name").value.trim(),
+    years_of_experience: years === "" ? null : Number(years), seniority: $("#e-seniority").value,
+    target_roles: splitList($("#e-roles").value), search_queries: splitList($("#e-queries").value), skills: splitList($("#e-skills").value) };
+  try { state.profile = await api("/api/profile", { method: "PUT", body: updated }); toast("Profile saved"); renderProfile(); }
+  catch (e) { toast(e.message, true); }
+}
+
+// ---------------------------------------------------------------- search
+$("#search-btn").addEventListener("click", runSearch);
+async function runSearch() {
+  const btn = $("#search-btn");
+  btn.disabled = true; clear(btn, h("span", { class: "spinner" }), " Searching…");
+  clear($("#results-head"), h("div", { class: "muted" }, "Searching all sources, filtering and scoring — usually 20–60 seconds."));
+  clear($("#jobs"));
+  try {
+    const resp = await api("/api/search", { method: "POST", body: {
+      location: $("#s-location").value.trim() || "Chennai", remote_only: $("#s-remote").checked,
+      max_results: Number($("#s-max").value) || 50, custom_query: $("#s-query").value.trim() } });
+    state.search = { summary: null, response: resp };
+    setView("latest");
+    renderResults();
+    loadStatus();
+  } catch (e) { toast(e.message, true); clear($("#results-head")); }
+  finally { btn.disabled = !state.profile; btn.textContent = "Search now"; }
+}
+
+$("#view").addEventListener("change", e => {
+  const v = e.target.value;
+  if (v === "latest") loadLatestSearch();
+  else if (v !== "saved") loadCombined(Number(v));
+});
+function setView(value, note = "") { $("#view").value = value; $("#view-note").textContent = note; }
+
+async function loadCombined(days) {
+  setView(String(days));
+  clear($("#results-head"), h("div", { class: "muted" }, h("span", { class: "spinner" }), " Combining saved searches…"));
+  try {
+    const c = await api(`/api/searches/combined?days=${days}`);
+    state.search = { summary: null, response: c.response, combined: c };
+    renderResults();
+  } catch (e) { toast(e.message, true); }
+}
+
+async function loadLatestSearch() {
+  setView("latest");
+  try { state.search = await api("/api/searches/latest"); } catch (e) { if (e.status !== 404) throw e; state.search = null; }
+  renderResults();
+}
+
+$$("#filters button").forEach(b => b.addEventListener("click", () => {
+  state.filter = b.dataset.filter;
+  $$("#filters button").forEach(x => x.classList.toggle("on", x === b));
+  renderJobs();
+}));
+$("#sort").addEventListener("change", e => { state.sort = e.target.value; renderJobs(); });
+
+function renderResults() {
+  const head = $("#results-head");
+  $("#filter-row").classList.toggle("hidden", !state.search);
+  if (!state.search) {
+    clear(head, h("div", { class: "empty" }, state.profile ? "No searches yet — press Search now." : "Upload your resume, then search."));
+    clear($("#jobs")); return;
+  }
+  const r = state.search.response, when = state.search.summary, combined = state.search.combined;
+  const excluded = Object.entries(r.excluded || {}).filter(([, n]) => n);
+  if (combined) {
+    const exportUrl = fmt => `/api/searches/combined/export?days=${combined.days}&format=${fmt}`;
+    const from = new Date(combined.start).toLocaleDateString([], { day: "numeric", month: "short" });
+    clear(head, h("div", { class: "summary" },
+      h("span", {}, h("b", {}, r.total_returned), " unique jobs"),
+      h("span", { class: "chip good" }, `${r.new_count} new in this period`),
+      h("span", { class: "muted small" },
+        `from ${combined.searches.length} search${combined.searches.length === 1 ? "" : "es"} since ${from} · ` +
+        `${combined.total_listings} listings · ${combined.duplicates_removed} duplicates removed`),
+      h("span", { class: "grow" }),
+      r.total_returned ? h("a", { class: "btn sm", href: exportUrl("xlsx") }, "Export Excel") : null,
+      r.total_returned ? h("a", { class: "btn sm", href: exportUrl("csv") }, "CSV") : null),
+      combined.searches.length ? null : h("div", { class: "empty" }, "No saved searches in this period."));
+    return renderJobs();
+  }
+  clear(head,
+    h("div", { class: "summary" },
+      h("span", {}, h("b", {}, r.total_returned), " matches"),
+      h("span", { class: "chip good" }, `${r.new_count} new`),
+      h("span", { class: "muted small" }, `from ${r.total_fetched} fetched · ${r.duplicates_merged} duplicates merged`),
+      h("span", { class: "chip" + (r.scoring_engine === "gemini" ? " accent" : r.scoring_engine.includes("failed") ? " warn" : "") },
+        r.scoring_engine === "gemini" ? "AI-scored" : r.scoring_engine.startsWith("gemini") ? "AI-scored (partly)" : r.scoring_engine.includes("failed") ? "AI scoring failed — local scores" : "Local scoring"),
+      when ? h("span", { class: "muted small" }, `${when.trigger === "scheduled" ? "Daily search" : "Search"} · ${fmtDateTime(when.created_at)}`) : null,
+      h("span", { class: "grow" }),
+      r.search_id ? h("a", { class: "btn sm", href: `/api/searches/${encodeURIComponent(r.search_id)}/export?format=xlsx` }, "Export Excel") : null,
+      r.search_id ? h("a", { class: "btn sm", href: `/api/searches/${encodeURIComponent(r.search_id)}/export?format=csv` }, "CSV") : null),
+    h("div", { class: "chips", style: "margin-bottom:6px" }, r.sources.map(s =>
+      h("span", { class: "chip " + (s.status === "ok" ? (s.count ? "good" : "") : s.status === "error" ? "bad" : ""), title: s.message || "" },
+        `${SOURCE_LABEL[s.source] || s.source}: ${s.status === "ok" ? s.count : s.status}`))),
+    excluded.length ? h("details", { class: "small", style: "margin-bottom:8px" },
+      h("summary", {}, `Hidden: ${excluded.reduce((a, [, n]) => a + n, 0)} jobs`),
+      h("ul", { class: "muted", style: "margin:4px 0" }, excluded.map(([k, n]) => h("li", {}, `${n} — ${EXCLUDE_LABEL[k] || k}`)))) : null);
+  renderJobs();
+}
+
+function visibleJobs() {
+  let jobs = [...(state.search?.response.jobs || [])];
+  const f = state.filter;
+  if (f === "new") jobs = jobs.filter(j => j.is_new);
+  if (f === "local" || f === "remote") jobs = jobs.filter(j => j.location_match === f);
+  if (f === "untracked") jobs = jobs.filter(j => !j.tracking_status);
+  if (state.sort === "date") jobs.sort((a, b) => (Date.parse(b.posted_at) || 0) - (Date.parse(a.posted_at) || 0));
+  return jobs;
+}
+
+function renderJobs() {
+  const jobs = visibleJobs();
+  if (!state.search) return;
+  clear($("#jobs"), jobs.length ? jobs.map(jobCard) : h("div", { class: "empty" }, "No jobs match this filter."));
+}
+
+function jobCard(j) {
+  const cls = j.match_score >= 75 ? "s-high" : j.match_score >= 55 ? "s-mid" : "s-low";
+  const sourceLinks = [h("a", { href: j.url, target: "_blank", rel: "noopener" }, SOURCE_LABEL[j.source] || j.source),
+    ...(j.alt_links || []).map(l => h("a", { href: l.url, target: "_blank", rel: "noopener" }, SOURCE_LABEL[l.source] || l.source))];
+  const linkList = sourceLinks.flatMap((a, i) => i ? [", ", a] : [a]);
+  return h("article", { class: "job", "data-key": j.key },
+    h("div", { class: "score " + cls, title: `Scored by ${j.scoring_engine}` }, h("div", {}, j.match_score, h("small", {}, j.scoring_engine === "gemini" ? "AI" : "local"))),
+    h("div", {},
+      h("div", { class: "row", style: "gap:8px" },
+        h("h3", {}, h("a", { href: j.url, target: "_blank", rel: "noopener" }, j.title)),
+        j.is_new ? h("span", { class: "chip good" }, "NEW") : null,
+        j.appearances > 1 ? h("span", { class: "chip", title: `First seen ${fmtDateTime(j.first_seen)}` },
+          `Seen in ${j.appearances} searches`) : null,
+        j.tracking_status ? h("span", { class: "chip accent" }, STATUS_LABEL[j.tracking_status]) : null),
+      h("div", { class: "meta" },
+        h("span", {}, h("b", {}, j.company)),
+        h("span", {}, (j.location_match === "local" ? "📍 " : "🌐 ") + j.location),
+        j.salary ? h("span", {}, j.salary) : null,
+        j.employment_type ? h("span", {}, j.employment_type) : null,
+        j.posted_at ? h("span", {}, "Posted " + ago(j.posted_at)) : null),
+      j.match_reasoning ? h("div", { class: "reason" }, j.match_reasoning) : null,
+      (j.matched_skills.length || j.missing_skills.length) ? h("div", { class: "skills" },
+        j.matched_skills.slice(0, 10).map(s => h("span", { class: "chip good" }, "✓ " + s)),
+        j.missing_skills.slice(0, 6).map(s => h("span", { class: "chip warn" }, "✗ " + s))) : null,
+      h("div", { class: "actions" },
+        ["saved", "applied", "dismissed"].map(st => h("button", {
+          class: "btn sm" + (j.tracking_status === st ? " on" : ""),
+          onclick: () => setJobStatus(j, j.tracking_status === st ? null : st) },
+          { saved: "★ Save", applied: "✓ Applied", dismissed: "✕ Not interested" }[st])),
+        h("button", { class: "btn sm", onclick: () => openKit(j) }, "✉ Cover letter & tips"),
+        h("button", { class: "btn sm", onclick: () => openCompany(j) }, "🏢 Company"),
+        h("span", { class: "small muted" }, "Apply via: ", linkList)),
+      j.description ? h("details", {}, h("summary", {}, "Job description"), h("div", { class: "desc" }, j.description)) : null));
+}
+
+async function setJobStatus(job, status) {
+  try {
+    if (status === null) await api(`/api/tracker/${encodeURIComponent(job.key)}`, { method: "DELETE" });
+    else await api("/api/tracker", { method: "POST", body: { job, status } });
+    const jobs = state.search.response.jobs;
+    if (status === "dismissed") state.search.response.jobs = jobs.filter(x => x.key !== job.key);
+    else jobs.forEach(x => { if (x.key === job.key) x.tracking_status = status || ""; });
+    renderJobs(); loadStatus();
+    toast(status === "dismissed" ? "Hidden — won't show again" : status ? `Marked ${STATUS_LABEL[status].toLowerCase()}` : "Removed from tracker");
+  } catch (e) { toast(e.message, true); }
+}
+
+// ---------------------------------------------------------------- application kit
+const kitDialog = $("#kit-dialog");
+let kitJob = null;
+$("#kit-close").addEventListener("click", () => kitDialog.close());
+$("#kit-tone").addEventListener("change", () => loadKit(false));
+$("#kit-regen").addEventListener("click", () => loadKit(true));
+
+function openKit(job) {
+  kitJob = job;
+  $("#kit-title").textContent = job.title;
+  $("#kit-sub").textContent = `${job.company} · ${job.location}`;
+  kitDialog.showModal();
+  loadKit(false);
+}
+
+async function loadKit(regenerate) {
+  const job = kitJob, body = $("#kit-body"), tone = $("#kit-tone").value;
+  if (!state.status?.gemini_configured) {
+    return clear(body, h("div", { class: "empty" }, "Cover letters need a Gemini API key — add GEMINI_API_KEY to .env and restart."));
+  }
+  $("#kit-regen").disabled = true;
+  clear(body, h("div", { class: "muted" }, h("span", { class: "spinner" }), " Writing a tailored cover letter from your resume… (10–40 seconds)"));
+  try {
+    const kit = await api("/api/application-kit", { method: "POST", body: { job, tone, regenerate } });
+    if (job !== kitJob) return;  // user opened another job meanwhile
+    renderKit(kit);
+  } catch (e) {
+    if (job === kitJob) clear(body, h("div", { class: "empty" }, e.message));
+  } finally { $("#kit-regen").disabled = false; }
+}
+
+function copyButton(getText, label = "Copy") {
+  return h("button", { class: "btn sm", onclick: async e => {
+    try { await navigator.clipboard.writeText(getText()); e.target.textContent = "Copied ✓"; setTimeout(() => e.target.textContent = label, 1500); }
+    catch { toast("Couldn't copy — select the text and press Ctrl+C", true); } } }, label);
+}
+
+function renderKit(kit) {
+  const list = items => items.length ? h("ul", {}, items.map(i => h("li", {}, i))) : h("div", { class: "muted small" }, "—");
+  clear($("#kit-body"),
+    h("div", { class: "row" }, h("h4", { style: "margin:0" }, "Cover letter"), h("span", { class: "grow" }),
+      h("span", { class: "small muted" }, `Generated ${ago(kit.created_at)}`), copyButton(() => kit.cover_letter)),
+    h("div", { class: "letter", style: "margin-top:8px" }, kit.cover_letter),
+    h("p", { class: "small muted" }, "Written only from facts in your resume — read it through and adjust before sending."),
+    h("h4", {}, "Resume tips for this job"), list(kit.resume_tips),
+    h("h4", {}, "Keywords to make visible (you have these)"),
+    kit.keywords.length ? h("div", { class: "skills" }, kit.keywords.map(k => h("span", { class: "chip good" }, k)), copyButton(() => kit.keywords.join(", "), "Copy all")) : h("div", { class: "muted small" }, "—"),
+    h("h4", {}, "Interview talking points"), list(kit.talking_points));
+}
+
+// ---------------------------------------------------------------- company insights
+const coDialog = $("#co-dialog");
+let coJob = null;
+$("#co-close").addEventListener("click", () => coDialog.close());
+$("#co-refresh").addEventListener("click", () => loadCompany(true));
+
+function openCompany(job) {
+  coJob = job;
+  $("#co-title").textContent = job.company;
+  $("#co-sub").textContent = `Reviews, pay and reputation · for ${job.title}`;
+  clear($("#co-links")); clear($("#co-body"));
+  coDialog.showModal();
+  const q = new URLSearchParams({ company: job.company, role: job.title, location: $("#s-location").value.trim() || "Chennai" });
+  api(`/api/company/links?${q}`).then(links => { if (job === coJob) renderCompanyLinks(links); }).catch(() => {});
+  loadCompany(false);
+}
+
+function renderCompanyLinks(links) {
+  clear($("#co-links"), links.map(l => h("a", { class: "btn sm", href: l.url, target: "_blank", rel: "noopener" }, l.label + " ↗")));
+}
+
+async function loadCompany(regenerate) {
+  const job = coJob, body = $("#co-body");
+  $("#co-refresh").disabled = true;
+  clear(body, h("div", { class: "muted", style: "margin-top:12px" }, h("span", { class: "spinner" }), " Gathering company insights… (10–30 seconds)"));
+  try {
+    const res = await api("/api/company/insights", { method: "POST", body: {
+      company: job.company, role: job.title, location: $("#s-location").value.trim() || "Chennai", regenerate } });
+    if (job !== coJob) return;
+    renderCompanyLinks(res.links);
+    if (!res.insight) return clear(body, h("p", { class: "muted" }, res.ai_error || "No AI summary available."));
+    renderCompany(res.insight);
+  } catch (e) { if (job === coJob) clear(body, h("p", { class: "muted" }, e.message)); }
+  finally { $("#co-refresh").disabled = false; }
+}
+
+function renderCompany(i) {
+  const list = items => items.length ? h("ul", {}, items.map(x => h("li", {}, x))) : h("div", { class: "muted small" }, "—");
+  const badge = i.grounded
+    ? h("span", { class: "chip good" }, "Live Google data")
+    : h("span", { class: "chip warn", title: "Your Gemini key can't use Google Search, so this comes from the AI's own knowledge" }, "AI estimate — not checked against live data");
+  clear($("#co-body"),
+    h("div", { class: "row", style: "margin-top:14px" }, badge, h("span", { class: "small muted" }, `Generated ${ago(i.generated_at)}`)),
+    !i.known ? h("p", { class: "chip warn", style: "display:block;margin-top:10px" },
+      "The AI doesn't know this company well — use the links above to check reviews.") : null,
+    i.overview ? h("p", {}, i.overview) : null,
+    i.rating != null ? h("div", { class: "row", style: "gap:8px" },
+      h("span", { style: "font-size:22px;font-weight:700" }, i.rating.toFixed(1)),
+      h("span", {}, "★".repeat(Math.round(i.rating)) + "☆".repeat(5 - Math.round(i.rating))),
+      h("span", { class: "muted small" }, [i.rating_source, i.review_count].filter(Boolean).join(" · "))) : null,
+    i.salary_range ? [h("h4", {}, `Pay — ${i.role}`), h("div", {}, h("b", {}, i.salary_range)),
+      i.salary_note ? h("div", { class: "small muted" }, i.salary_note) : null] : null,
+    (i.pros.length || i.cons.length) ? h("div", { class: "profile-grid", style: "grid-template-columns:1fr 1fr" },
+      h("div", {}, h("h4", {}, "Employees like"), list(i.pros)),
+      h("div", {}, h("h4", {}, "Common complaints"), list(i.cons))) : null,
+    i.questions_to_ask.length ? [h("h4", {}, "Questions to ask in the interview"), list(i.questions_to_ask)] : null,
+    i.caveats ? h("p", { class: "small muted", style: "margin-top:14px" }, "⚠ ", i.caveats) : null,
+    i.sources.length ? [h("h4", {}, "Sources"), h("ul", {}, i.sources.map(s =>
+      h("li", {}, h("a", { href: s.url, target: "_blank", rel: "noopener" }, s.label))))] : null);
+}
+
+// ---------------------------------------------------------------- tracker
+async function loadTracker() {
+  const items = await api("/api/tracker");
+  const counts = Object.fromEntries(STATUSES.map(s => [s, items.filter(i => i.status === s).length]));
+  const filters = [["active", "Active", items.filter(i => !["rejected", "dismissed"].includes(i.status)).length],
+    ...STATUSES.map(s => [s, STATUS_LABEL[s], counts[s]])];
+  clear($("#tracker-filters"), filters.map(([k, label, n]) => h("button", {
+    class: "btn sm" + (state.trackerFilter === k ? " on" : ""), onclick: () => { state.trackerFilter = k; loadTracker(); } }, `${label} ${n}`)));
+  const shown = items.filter(i => state.trackerFilter === "active" ? !["rejected", "dismissed"].includes(i.status) : i.status === state.trackerFilter);
+  clear($("#tracker-list"), shown.length ? shown.map(trackerItem) : h("div", { class: "empty" },
+    items.length ? "Nothing here." : "Nothing tracked yet — use Save / Applied on the Matches tab."));
+}
+
+function trackerItem(t) {
+  const j = t.job;
+  const notes = h("textarea", { rows: 2, placeholder: "Notes (interview dates, contacts…)" }, t.notes);
+  notes.addEventListener("change", async () => {
+    try { await api(`/api/tracker/${encodeURIComponent(t.key)}`, { method: "PATCH", body: { notes: notes.value } }); toast("Notes saved"); }
+    catch (e) { toast(e.message, true); }
+  });
+  const select = h("select", {}, STATUSES.map(s => h("option", { value: s, selected: s === t.status }, STATUS_LABEL[s])));
+  select.addEventListener("change", async () => {
+    try { await api(`/api/tracker/${encodeURIComponent(t.key)}`, { method: "PATCH", body: { status: select.value } }); toast(`Moved to ${STATUS_LABEL[select.value]}`); loadTracker(); loadStatus(); }
+    catch (e) { toast(e.message, true); }
+  });
+  return h("div", { class: "tracker-item" },
+    h("div", {},
+      h("div", { class: "row", style: "gap:8px" }, h("b", {}, h("a", { href: j.url, target: "_blank", rel: "noopener" }, j.title)),
+        h("span", { class: "chip" }, `${j.match_score}`)),
+      h("div", { class: "meta" }, h("span", {}, j.company), h("span", {}, j.location), j.salary ? h("span", {}, j.salary) : null),
+      h("div", { class: "small muted" }, t.history.map(c => `${STATUS_LABEL[c.status]} ${new Date(c.at).toLocaleDateString()}`).join(" → ")),
+      h("div", { style: "margin-top:6px" }, notes)),
+    h("div", { class: "row", style: "align-items:flex-start" }, select,
+      h("button", { class: "btn sm", onclick: () => openKit(j) }, "✉ Cover letter"),
+      h("button", { class: "btn sm", onclick: () => openCompany(j) }, "🏢 Company"),
+      h("button", { class: "btn sm", onclick: async () => {
+        try { await api(`/api/tracker/${encodeURIComponent(t.key)}`, { method: "DELETE" }); loadTracker(); loadStatus(); }
+        catch (e) { toast(e.message, true); } } }, "Remove")));
+}
+
+// ---------------------------------------------------------------- history
+async function loadHistory() {
+  const rows = await api("/api/searches");
+  const table = $("#history-table");
+  if (!rows.length) return clear(table, h("tr", {}, h("td", { class: "empty" }, "No searches yet.")));
+  clear(table,
+    h("tr", {}, ["When", "Type", "Location", "Queries", "Shown", "New", "Top score", "Scoring"].map(t => h("th", {}, t))),
+    rows.map(r => h("tr", { class: "click", onclick: () => openSearch(r.id) },
+      h("td", {}, fmtDateTime(r.created_at)), h("td", {}, r.trigger === "scheduled" ? "Daily" : "Manual"),
+      h("td", {}, r.location), h("td", { class: "small" }, r.queries.join(", ")), h("td", {}, r.total_returned),
+      h("td", {}, r.new_count ? h("span", { class: "chip good" }, r.new_count) : "0"), h("td", {}, r.top_score),
+      h("td", { class: "small muted" }, r.scoring_engine))));
+}
+async function openSearch(id) {
+  try {
+    state.search = await api(`/api/searches/${encodeURIComponent(id)}`);
+    setView("saved", `${state.search.summary.trigger === "scheduled" ? "Daily search" : "Search"} of ${fmtDateTime(state.search.summary.created_at)}`);
+    showTab("matches"); renderResults();
+  }
+  catch (e) { toast(e.message, true); }
+}
+
+// ---------------------------------------------------------------- settings
+function renderSettings() {
+  const s = state.status; if (!s) return;
+  const st = s.schedule.settings;
+  $("#sc-enabled").checked = st.enabled; $("#sc-time").value = st.run_time; $("#sc-location").value = st.location;
+  $("#sc-max").value = st.max_results; $("#sc-remote").checked = st.remote_only;
+  renderScheduleState();
+  const table = $("#sources-table");
+  clear(table, h("tr", {}, ["Source", "Coverage", "Key", "Free quota left"].map(t => h("th", {}, t))),
+    s.sources.map(src => {
+      const left = quotaLeft(src.name), q = s.quota[src.name];
+      return h("tr", {},
+        h("td", {}, SOURCE_LABEL[src.name] || src.name),
+        h("td", { class: "small muted" }, { remotive: "Remote, worldwide", arbeitnow: "Remote (mostly Europe)", himalayas: "Remote, open to India",
+          jobicy: "Remote, worldwide", ats_boards: "Company career pages", adzuna: "India (Chennai)", jsearch: "India: LinkedIn, Naukri, Shine…",
+          serpapi: "Google Jobs India" }[src.name] || ""),
+        h("td", {}, src.needs_key ? h("span", { class: "chip " + (src.configured ? "good" : "warn") }, src.configured ? "configured" : "not set") : h("span", { class: "muted small" }, "not needed")),
+        h("td", {}, left !== null ? `${left}${q?.reset_at ? ` · resets ${new Date(q.reset_at).toLocaleDateString()}` : ""}` : src.needs_key && src.configured ? h("span", { class: "muted small" }, "checked on next search") : "—"));
+    }),
+    h("tr", {}, h("td", {}, "Gemini (AI scoring)"), h("td", { class: "small muted" }, s.gemini_model),
+      h("td", {}, h("span", { class: "chip " + (s.gemini_configured ? "good" : "warn") }, s.gemini_configured ? "configured" : "not set")), h("td", {}, "—")));
+}
+function renderScheduleState() {
+  const sc = state.status.schedule, st = sc.state;
+  clear($("#sc-state"),
+    sc.running ? h("div", {}, h("span", { class: "spinner" }), " Running now…") : null,
+    sc.settings.enabled && !sc.running ? h("div", {}, "Next run: ", h("b", {}, fmtDateTime(sc.next_run_at))) : null,
+    st.last_attempt_at ? h("div", {}, "Last run: ", fmtDateTime(st.last_attempt_at), " — ",
+      h("span", { class: "chip " + (st.last_status === "ok" ? "good" : st.last_status === "error" ? "bad" : "warn") }, st.last_status),
+      " ", st.last_message, st.last_search_id ? [" · ", h("a", { href: "#", onclick: e => { e.preventDefault(); openSearch(st.last_search_id); } }, "open results")] : null)
+      : h("div", { class: "muted" }, "Hasn't run yet."));
+}
+$("#sc-save").addEventListener("click", async () => {
+  try {
+    await api("/api/schedule", { method: "PUT", body: { enabled: $("#sc-enabled").checked, run_time: $("#sc-time").value,
+      location: $("#sc-location").value.trim() || "Chennai", max_results: Number($("#sc-max").value) || 50, remote_only: $("#sc-remote").checked } });
+    await loadStatus(); renderSettings(); toast("Schedule saved");
+  } catch (e) { toast(e.message, true); }
+});
+$("#sc-run").addEventListener("click", async () => {
+  try { await api("/api/schedule/run", { method: "POST" }); await loadStatus(); renderSettings(); pollSchedule(); }
+  catch (e) { toast(e.message, true); }
+});
+let polling = false;
+async function pollSchedule() {
+  if (polling) return; polling = true;
+  try {
+    while (true) {
+      await new Promise(r => setTimeout(r, 3000));
+      await loadStatus();
+      if (!$("#tab-settings").classList.contains("hidden")) renderSettings();
+      if (!state.status.schedule.running) {
+        const st = state.status.schedule.state;
+        toast(st.last_status === "ok" ? `Daily search done: ${st.last_message}` : `Daily search: ${st.last_message}`, st.last_status === "error");
+        if (st.last_status === "ok") await loadLatestSearch();
+        break;
+      }
+    }
+  } finally { polling = false; }
+}
+
+// ---------------------------------------------------------------- boot
+(async function boot() {
+  try {
+    await Promise.all([loadStatus(), loadProfile()]);
+    await loadLatestSearch();
+    if (state.status.schedule.running) pollSchedule();
+    if (location.hash.length > 1) showTab(location.hash.slice(1));
+  } catch (e) { toast("Couldn't reach the app server: " + e.message, true); }
+  setInterval(() => loadStatus().catch(() => {}), 60000);
+})();
+</script>
+</body>
+</html>

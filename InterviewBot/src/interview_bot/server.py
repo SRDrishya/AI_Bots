@@ -2,65 +2,39 @@ import json
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from typing import cast
 
+from agents.exceptions import AgentsException
 from openai import APIError, OpenAI
 from openai.types.live.media_session_config_param import MediaSessionConfigParam
 
+from interview_bot.agent import create_topic_rag_agent, run_topic_rag_agent
 from interview_bot.config import Settings
-from interview_bot.topic_notes import (
-    DOCUMENTS_DIR,
-    prepare_topic_notes,
-    search_documents,
-)
+from interview_bot.prompts import DEFAULT_AGENT_DISPATCH_INSTRUCTIONS
+from interview_bot.topic_notes import DOCUMENTS_DIR
 
 WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 NOTES_DIR = Path(__file__).resolve().parents[2] / "topic_notes"
 HOST = "127.0.0.1"
 PORT = 8000
 MAX_REQUEST_BYTES = 65_536
-MAX_TOOL_REQUEST_BYTES = 8_192
+MAX_AGENT_REQUEST_BYTES = 32_768
 
-TOPIC_NOTE_TOOLS = [
+INTERVIEW_AGENT_TOOLS = [
     {
         "type": "function",
-        "name": "search_documents",
+        "name": "run_topic_rag_agent",
         "description": (
-            "Search the local documents folder and saved topic notes for "
-            "passages relevant to the selected topic and current question. "
-            "Call this before answering. Judge whether the returned passages "
-            "adequately support a useful answer and question. If there are "
-            "no passages or they are insufficient, call prepare_topic_notes."
+            "Ask the interview RAG agent to produce the next spoken response. "
+            "Include the full available conversation, the candidate's current "
+            "answer, and the chosen topic and level. The agent searches local "
+            "documents first and decides whether web research is necessary."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "topic": {"type": "string"},
-                "query": {"type": "string"},
+                "conversation_context": {"type": "string"},
             },
-            "required": ["topic", "query"],
-            "additionalProperties": False,
-        },
-        "strict": True,
-    },
-    {
-        "type": "function",
-        "name": "prepare_topic_notes",
-        "description": (
-            "Research a topic with web search and GPT-6 Luna, write short "
-            "sourced notes, save a PDF in the documents folder and a Markdown "
-            "copy in topic_notes, and return the notes. Call only when the "
-            "available local documents are missing or insufficient."
-        ),
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "topic": {"type": "string"},
-                "candidate_context": {
-                    "type": "string",
-                },
-            },
-            "required": ["topic", "candidate_context"],
+            "required": ["conversation_context"],
             "additionalProperties": False,
         },
         "strict": True,
@@ -77,44 +51,14 @@ def build_session_config(settings: Settings) -> MediaSessionConfigParam:
             "type": "responses",
             "responses": {
                 "model": settings.reasoning_model,
-                "instructions": settings.reasoning_instructions,
+                "instructions": DEFAULT_AGENT_DISPATCH_INSTRUCTIONS,
                 "reasoning": {"effort": "medium"},
                 "max_output_tokens": 256,
-                "tools": TOPIC_NOTE_TOOLS,
+                "tools": INTERVIEW_AGENT_TOOLS,
                 "parallel_tool_calls": False,
             },
         },
     }
-
-
-def execute_topic_tool(
-    name: object,
-    arguments: object,
-    client: OpenAI,
-    settings: Settings,
-    notes_dir: Path = NOTES_DIR,
-    documents_dir: Path = DOCUMENTS_DIR,
-) -> dict[str, object]:
-    if not isinstance(arguments, dict):
-        raise TypeError("Tool arguments must be a JSON object.")
-
-    if name == "search_documents":
-        return search_documents(
-            topic=cast(str, arguments.get("topic")),
-            query=cast(str, arguments.get("query")),
-            notes_dir=notes_dir,
-            documents_dir=documents_dir,
-        )
-    if name == "prepare_topic_notes":
-        return prepare_topic_notes(
-            client=client,
-            settings=settings,
-            topic=cast(str, arguments.get("topic")),
-            candidate_context=cast(str, arguments.get("candidate_context")),
-            notes_dir=notes_dir,
-            documents_dir=documents_dir,
-        )
-    raise ValueError("Unsupported topic-notes tool.")
 
 
 def make_handler(
@@ -124,6 +68,13 @@ def make_handler(
     notes_dir: Path = NOTES_DIR,
     documents_dir: Path = DOCUMENTS_DIR,
 ) -> type[BaseHTTPRequestHandler]:
+    agent = create_topic_rag_agent(
+        settings=settings,
+        client=client,
+        notes_dir=notes_dir,
+        documents_dir=documents_dir,
+    )
+
     class InterviewBotHandler(BaseHTTPRequestHandler):
         def _reply(self, status: int, content_type: str, body: bytes) -> None:
             self.send_response(status)
@@ -157,7 +108,7 @@ def make_handler(
             self._reply(200, content_type, content)
 
         def do_POST(self) -> None:
-            if self.path not in {"/api/session", "/api/tool"}:
+            if self.path not in {"/api/session", "/api/agent"}:
                 self._reply_json(404, {"error": "Not found"})
                 return
             if self.headers.get("Origin") not in allowed_origins:
@@ -167,7 +118,7 @@ def make_handler(
             max_length = (
                 MAX_REQUEST_BYTES
                 if self.path == "/api/session"
-                else MAX_TOOL_REQUEST_BYTES
+                else MAX_AGENT_REQUEST_BYTES
             )
             try:
                 length = int(self.headers.get("Content-Length", "0"))
@@ -183,46 +134,30 @@ def make_handler(
                 self._reply_json(400, {"error": "Request body must be valid JSON"})
                 return
 
-            if self.path == "/api/tool":
+            if self.path == "/api/agent":
                 try:
-                    result = execute_topic_tool(
-                        name=payload.get("name") if isinstance(payload, dict) else None,
-                        arguments=(
-                            payload.get("arguments")
-                            if isinstance(payload, dict)
-                            else None
-                        ),
-                        client=client,
-                        settings=settings,
-                        notes_dir=notes_dir,
-                        documents_dir=documents_dir,
+                    context = (
+                        payload.get("conversation_context")
+                        if isinstance(payload, dict)
+                        else None
                     )
+                    result = run_topic_rag_agent(agent, context)
                 except (TypeError, ValueError) as error:
                     self._reply_json(400, {"error": str(error)})
                     return
-                except APIError as error:
-                    status = error.status_code
-                    if status is None or not 400 <= status < 600:
-                        status = 502
+                except (AgentsException, APIError, OSError, RuntimeError) as error:
                     print(
-                        f"Topic-notes API request failed (HTTP {status}).",
+                        f"Interview agent request failed: {error}",
                         file=sys.stderr,
                     )
                     self._reply_json(
-                        status,
-                        {"error": "Could not research this topic right now."},
-                    )
-                    return
-                except (OSError, RuntimeError) as error:
-                    print(f"Topic-notes operation failed: {error}", file=sys.stderr)
-                    self._reply_json(
                         502,
-                        {"error": "Could not prepare or read the topic notes."},
+                        {"error": "The interview agent could not complete this turn."},
                     )
                     return
                 self._reply_json(
                     200,
-                    {"result": json.dumps(result, ensure_ascii=False)},
+                    {"result": result},
                 )
                 return
 

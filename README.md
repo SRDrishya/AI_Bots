@@ -1,6 +1,6 @@
 # Python Apps Collection
 
-This folder contains a small set of beginner-friendly Python command-line applications.
+This folder contains a small collection of beginner-friendly Python applications.
 
 ## Projects
 
@@ -19,6 +19,10 @@ This folder contains a small set of beginner-friendly Python command-line applic
 ### InterviewBot
 - A browser-based voice interview practice app using OpenAI GPT-Live over WebRTC, with natural turn-taking and interruption support.
 - Run it from the InterviewBot folder after configuring `OPENAI_API_KEY`; see its README for setup.
+
+### Tutorial Generator
+- A browser-based research agent that creates beginner-friendly, sourced PDF tutorials with a visual flow diagram and examples when helpful.
+- Run it from the Tutorial_Generator folder after configuring `OPENAI_API_KEY`; see its README for setup.
 
 ## Getting Started
 1. Open the project folder you want to use.

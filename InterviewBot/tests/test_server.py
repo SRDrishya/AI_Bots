@@ -6,19 +6,23 @@ from http.server import ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
+from agents import Agent
 from docx import Document
 from openai import OpenAI
 
+from interview_bot.agent import create_topic_rag_agent, run_topic_rag_agent
 from interview_bot.config import Settings
-from interview_bot.prompts import DEFAULT_INTERVIEWER_INSTRUCTIONS
+from interview_bot.prompts import (
+    DEFAULT_AGENT_DISPATCH_INSTRUCTIONS,
+    DEFAULT_INTERVIEWER_INSTRUCTIONS,
+)
 from interview_bot.server import (
-    TOPIC_NOTE_TOOLS,
+    INTERVIEW_AGENT_TOOLS,
     build_session_config,
-    execute_topic_tool,
     make_handler,
 )
 from interview_bot.topic_notes import (
@@ -74,7 +78,7 @@ class SessionConfigTests(unittest.TestCase):
         self.assertIn("session.input_audio.mute", script)
         self.assertIn("session.input_audio.unmute", script)
         self.assertIn("response.output_item.done", script)
-        self.assertIn("/api/tool", script)
+        self.assertIn("/api/agent", script)
         self.assertIn("what topic they want to discuss and their preferred level", script)
 
     def test_session_uses_live_model_prompt_and_voice(self) -> None:
@@ -96,10 +100,10 @@ class SessionConfigTests(unittest.TestCase):
                 "type": "responses",
                 "responses": {
                     "model": "gpt-6-luna",
-                    "instructions": settings.reasoning_instructions,
+                    "instructions": DEFAULT_AGENT_DISPATCH_INSTRUCTIONS,
                     "reasoning": {"effort": "medium"},
                     "max_output_tokens": 256,
-                    "tools": TOPIC_NOTE_TOOLS,
+                    "tools": INTERVIEW_AGENT_TOOLS,
                     "parallel_tool_calls": False,
                 },
             },
@@ -118,16 +122,38 @@ class SessionConfigTests(unittest.TestCase):
             "Delegate the opening and every candidate turn",
             session["instructions"],
         )
-        self.assertIn(
-            "ask exactly one relevant question grounded in retrieved evidence",
-            session["delegation"]["responses"]["instructions"],
+        self.assertIn("run_topic_rag_agent", session["delegation"]["responses"]["instructions"])
+        self.assertIn("Do not search documents", session["delegation"]["responses"]["instructions"])
+        self.assertIn("search_local_documents", settings.reasoning_instructions)
+        self.assertIn("prepare_sourced_topic_notes", settings.reasoning_instructions)
+
+    def test_agent_has_local_retrieval_and_research_tools(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            agent = create_topic_rag_agent(
+                Settings(api_key="test-key"),
+                cast(OpenAI, Mock()),
+                Path(temp_dir) / "topic_notes",
+                Path(temp_dir) / "documents",
+            )
+
+        self.assertEqual(agent.name, "Interview Topic RAG Agent")
+        self.assertEqual(agent.model, "gpt-6-luna")
+        self.assertEqual(
+            [agent_tool.name for agent_tool in agent.tools],
+            ["search_local_documents", "prepare_sourced_topic_notes"],
         )
-        self.assertIn("search_documents", session["delegation"]["responses"]["instructions"])
-        self.assertIn("prepare_topic_notes", session["delegation"]["responses"]["instructions"])
-        self.assertIn(
-            "Do not use web search when local documents",
-            session["delegation"]["responses"]["instructions"],
-        )
+
+    def test_agent_runner_returns_spoken_output(self) -> None:
+        agent = cast(Agent, Mock())
+        runner_result = SimpleNamespace(final_output="Here is the next question.")
+        with patch(
+            "interview_bot.agent.Runner.run_sync",
+            return_value=runner_result,
+        ) as run:
+            output = run_topic_rag_agent(agent, "Full interview context")
+
+        self.assertEqual(output, "Here is the next question.")
+        run.assert_called_once_with(agent, "Full interview context", max_turns=8)
 
     def test_session_route_exchanges_sdp_and_returns_live_answer(self) -> None:
         settings = Settings(api_key="test-key")
@@ -175,44 +201,38 @@ class SessionConfigTests(unittest.TestCase):
 
         self.assertEqual(raised.exception.code, 403)
 
-    def test_tool_route_returns_not_found_for_missing_documents(self) -> None:
-        with tempfile.TemporaryDirectory() as temp_dir:
-            root = Path(temp_dir)
-            server = self.start_test_server(
-                cast(OpenAI, Mock()),
-                root / "topic_notes",
-                root / "documents",
-            )
-            request = Request(
-                f"http://127.0.0.1:{server.server_port}/api/tool",
-                data=json.dumps(
-                    {
-                        "name": "search_documents",
-                        "arguments": {"topic": "RAG", "query": "chunking"},
-                    }
-                ).encode(),
-                headers={
-                    "Content-Type": "application/json",
-                    "Origin": "http://localhost",
-                },
-                method="POST",
-            )
-            with urlopen(request) as response:
-                payload = json.loads(response.read())
-
-        self.assertEqual(response.status, 200)
-        self.assertFalse(json.loads(payload["result"])["found"])
-
-    def test_tool_route_rejects_invalid_argument_types(self) -> None:
+    def test_agent_route_returns_agent_output(self) -> None:
         server = self.start_test_server(cast(OpenAI, Mock()))
         request = Request(
-            f"http://127.0.0.1:{server.server_port}/api/tool",
+            f"http://127.0.0.1:{server.server_port}/api/agent",
             data=json.dumps(
                 {
-                    "name": "search_documents",
-                    "arguments": {"topic": None, "query": "chunking"},
+                    "conversation_context": "The candidate wants to discuss RAG.",
                 }
             ).encode(),
+            headers={
+                "Content-Type": "application/json",
+                "Origin": "http://localhost",
+            },
+            method="POST",
+        )
+        with patch(
+            "interview_bot.server.run_topic_rag_agent",
+            return_value="Welcome. What topic would you like to discuss?",
+        ), urlopen(request) as response:
+            payload = json.loads(response.read())
+
+        self.assertEqual(response.status, 200)
+        self.assertEqual(
+            payload["result"],
+            "Welcome. What topic would you like to discuss?",
+        )
+
+    def test_agent_route_rejects_missing_conversation_context(self) -> None:
+        server = self.start_test_server(cast(OpenAI, Mock()))
+        request = Request(
+            f"http://127.0.0.1:{server.server_port}/api/agent",
+            data=json.dumps({"conversation_context": None}).encode(),
             headers={
                 "Content-Type": "application/json",
                 "Origin": "http://localhost",
@@ -386,23 +406,16 @@ class TopicNotesTests(unittest.TestCase):
 
     def test_search_tool_is_routed_and_validated(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
-            result = execute_topic_tool(
-                "search_documents",
-                {"topic": "RAG", "query": "retrieval"},
-                cast(OpenAI, Mock()),
+            agent = create_topic_rag_agent(
                 Settings(api_key="test-key"),
-                Path(temp_dir),
+                cast(OpenAI, Mock()),
+                Path(temp_dir) / "topic_notes",
                 Path(temp_dir) / "documents",
             )
-        self.assertFalse(result["found"])
-        with self.assertRaisesRegex(ValueError, "Unsupported"):
-            execute_topic_tool(
-                "unknown_tool",
-                {},
-                cast(OpenAI, Mock()),
-                Settings(api_key="test-key"),
-                Path(temp_dir),
-            )
+        self.assertEqual(
+            [agent_tool.name for agent_tool in agent.tools],
+            ["search_local_documents", "prepare_sourced_topic_notes"],
+        )
 
 
 if __name__ == "__main__":

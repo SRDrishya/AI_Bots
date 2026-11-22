@@ -57,36 +57,32 @@ async function handleDelegatedResponseEvent(envelope) {
   let toolOutput;
   try {
     const args = JSON.parse(item.arguments);
-    if (item.name === "prepare_topic_notes") {
-      const topic = typeof args.topic === "string" ? args.topic : "this topic";
-      eventChannel.send(JSON.stringify({
-        type: "session.commentary.append",
-        delegation_id: null,
-        content: `I couldn't find enough material in the available documents for ${topic}. Let me research it and prepare a short, sourced document, then we'll continue.`,
-      }));
-      setStatus(`Researching and preparing notes on ${topic}…`);
-    } else if (item.name === "search_documents") {
-      setStatus("Searching available documents…");
+    if (item.name !== "run_topic_rag_agent") {
+      throw new Error("The live session requested an unsupported agent tool.");
     }
+    eventChannel.send(JSON.stringify({
+      type: "session.commentary.append",
+      delegation_id: null,
+      content: "I'll check the available documents first and use web research only if they don't cover this well.",
+    }));
+    setStatus("Interview agent is checking the available documents…");
 
-    const response = await fetch("/api/tool", {
+    const response = await fetch("/api/agent", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name: item.name, arguments: args }),
+      body: JSON.stringify(args),
     });
     const result = await response.json();
     if (!response.ok) {
-      throw new Error(result.error || "The topic-notes operation failed.");
+      throw new Error(result.error || "The interview agent could not complete this turn.");
     }
     toolOutput = result.result;
-    if (item.name === "prepare_topic_notes") {
-      setStatus("Document prepared; the interviewer is reviewing it…", "active");
-    }
+    setStatus("The interviewer is preparing a response…", "active");
   } catch (error) {
     toolOutput = JSON.stringify({
-      error: error.message || "The topic-notes operation failed.",
+      error: error.message || "The interview agent could not complete this turn.",
     });
-    setStatus(error.message || "The topic-notes operation failed.", "error");
+    setStatus(error.message || "The interview agent could not complete this turn.", "error");
   }
 
   if (eventChannel?.readyState !== "open") return;
@@ -111,7 +107,7 @@ function handleServerEvent(event) {
     eventChannel.send(JSON.stringify({
       type: "session.instructions.append",
       delegation_id: null,
-      content: "The candidate has joined. Delegate to the configured Responses backend now for the opening interview turn. Speak its result: briefly welcome them, ask what topic they want to discuss and their preferred level, then stop and listen. For every later candidate turn, delegate before replying and speak the backend's response without inventing or replacing its interview question.",
+      content: "The candidate has joined. Call run_topic_rag_agent with the full relevant conversation context for the opening interview turn. Speak its result: briefly welcome them, ask what topic they want to discuss and their preferred level, then stop and listen. For every later candidate turn, call run_topic_rag_agent with the conversation so far before replying, and speak its response without inventing or replacing its interview question.",
     }));
   } else if (event.type === "session.input_transcript.delta") {
     addTranscriptFragment("candidate", event.delta);

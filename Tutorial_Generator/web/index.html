@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f8fc">
+    <title>Tutorial Generator</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+  </head>
+  <body>
+    <main class="page">
+      <section class="intro" aria-labelledby="page-title">
+        <p class="eyebrow">LEARN SOMETHING NEW</p>
+        <h1 id="page-title">A clear guide to any topic</h1>
+        <p class="intro-copy">
+          Enter a topic and the research agent will explore trusted tutorials
+          and documentation, then create a simple, illustrated PDF.
+        </p>
+      </section>
+
+      <section class="form-card" aria-label="Create a tutorial">
+        <form id="tutorial-form">
+          <label for="topic">What would you like to learn?</label>
+          <input
+            id="topic"
+            name="topic"
+            type="text"
+            maxlength="160"
+            placeholder="For example: How does a neural network learn?"
+            required
+          >
+
+          <label for="learning-goal">Anything specific you want to understand? <span>Optional</span></label>
+          <textarea
+            id="learning-goal"
+            name="learning_goal"
+            maxlength="500"
+            rows="3"
+            placeholder="For example: Explain the training process and show a small example."
+          ></textarea>
+
+          <button id="generate-button" type="submit">
+            <span class="button-label">Generate PDF tutorial</span>
+            <span class="spinner" aria-hidden="true"></span>
+          </button>
+        </form>
+        <p class="privacy-note">Your topic is researched online. Your API key stays on this app.</p>
+      </section>
+
+      <p id="status" class="status" role="status" aria-live="polite"></p>
+    </main>
+  </body>
+</html>

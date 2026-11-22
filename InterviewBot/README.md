@@ -1,23 +1,23 @@
 # InterviewBot
 
 InterviewBot is a browser-based voice interview practice app that uses
-OpenAI GPT-Live for voice conversation and WebRTC, and delegates interview
-reasoning to GPT-6 Luna. The interviewer first asks what topic the candidate
-wants to discuss and their preferred level. Luna uses the conversation and
-each answer to create the next contextual interview question. It searches the
-local document collection first and judges whether retrieved passages
-adequately cover the topic and current question. It uses those documents when
-sufficient and researches the web only when the local material is missing or
-inadequate. Newly researched notes are saved as a PDF in `documents/` and as a
-cited Markdown file in `topic_notes/`. GPT-Live speaks the exchange and
-handles turn-taking and interruptions. The app does not score answers or make
-hiring decisions.
+OpenAI GPT-Live for voice conversation and WebRTC, and uses an OpenAI Agents
+SDK RAG agent powered by GPT-6 Luna for interview reasoning. The interviewer
+first asks what topic the candidate wants to discuss and their preferred level.
+Luna uses the conversation and each answer to create the next contextual
+interview question. It searches the local document collection first and judges
+whether retrieved passages adequately cover the topic and current question.
+It uses those documents when sufficient and researches the web only when the
+local material is missing or inadequate. Newly researched notes are saved as
+a PDF in `documents/` and as a cited Markdown file in `topic_notes/`. GPT-Live
+speaks the exchange and handles turn-taking and interruptions. The app does
+not score answers or make hiring decisions.
 
 ## Features
 
 - Natural spoken conversation with one interview question at a time.
 - Uses GPT-Live's natural turn-taking and interruption handling, with
-  interview planning delegated to GPT-6 Luna.
+  interview planning handled by the GPT-6 Luna agent.
 - Pause and resume the interview without ending the session.
 - Displays live interviewer and candidate transcripts in the browser.
 - Searches local PDF, DOCX, Markdown, and TXT documents before using web search.
@@ -30,8 +30,8 @@ hiring decisions.
 ## Requirements
 
 - Python 3.10 or later.
-- An OpenAI API key with access to GPT-Live and the Responses API/model
-  configured for reasoning.
+- An OpenAI API key with access to GPT-Live and the configured GPT-6 Luna
+  reasoning model.
 - A modern browser with microphone permission. Headphones are recommended to
   avoid audio feedback.
 - Internet access.
@@ -76,7 +76,7 @@ and HTTPS before exposing it to other users.
 | `OPENAI_API_KEY` | Required | API key used by the Python server |
 | `OPENAI_LIVE_MODEL` | `gpt-live-1` | GPT-Live model |
 | `OPENAI_LIVE_VOICE` | `marin` | Generated interviewer voice |
-| `OPENAI_REASONING_MODEL` | `gpt-6-luna` | Responses model that plans interview answers and next questions |
+| `OPENAI_REASONING_MODEL` | `gpt-6-luna` | Model used by the Agents SDK interview agent |
 | `INTERVIEWER_INSTRUCTIONS` | Built-in prompt | Optional instructions for the spoken GPT-Live layer |
 | `REASONING_INSTRUCTIONS` | Built-in prompt | Optional instructions for Luna's interview planning |
 
@@ -90,6 +90,7 @@ InterviewBot/
 ├── main.py
 ├── src/
 │   └── interview_bot/
+│       ├── agent.py       # OpenAI Agents SDK agent and its retrieval tools
 │       ├── config.py
 │       ├── prompts.py
 │       └── server.py
@@ -108,6 +109,12 @@ these files and previously generated notes first; it calls web search only
 when it judges that the available passages cannot support the discussion.
 New web-researched topic briefs are saved both as a PDF in `documents/` and
 as a cited Markdown file in `topic_notes/`.
+
+The agent itself is implemented in `src/interview_bot/agent.py`: the
+`create_topic_rag_agent` function creates the GPT-6 Luna `Agent` with
+`@tool`-decorated document-retrieval and note-preparation tools. GPT-Live calls
+that agent through the `run_topic_rag_agent` function exposed by the Python
+server.
 
 ## Tests
 
