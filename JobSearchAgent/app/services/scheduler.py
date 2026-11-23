@@ -55,6 +55,7 @@ class ScheduleState(BaseModel):
     last_search_id: str = ""
     last_new_count: int = 0
     last_total: int = 0
+    last_email_message: str = ""   # result of the email scan that runs with the daily search
 
 
 class ScheduleStatus(BaseModel):
@@ -86,8 +87,10 @@ class SearchScheduler:
     DOC = "schedule.json"
 
     def __init__(self, storage: Storage, run: RunFn = run_search,
-                 clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc)):
+                 clock: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
+                 email_scan: Callable[[], Awaitable[dict]] | None = None):
         self.storage = storage
+        self._email_scan = email_scan
         self._run = run
         self._clock = clock
         self._lock = asyncio.Lock()
@@ -172,8 +175,24 @@ class SearchScheduler:
                 state.last_message = (f"{response.new_count} new of {response.total_returned} matches"
                                       + (f" ({trigger})" if trigger != "scheduled" else ""))
                 log.info("Scheduled search: %s", state.last_message)
+            state.last_email_message = await self._scan_emails()
             self._save(state=state)
             return state
+
+    async def _scan_emails(self) -> str:
+        """Pick up job emails received since the previous scan; never fails the daily run."""
+        if self._email_scan is None or not any(self.storage.load_doc("email_accounts.json", {}).values()):
+            return ""
+        try:
+            result = await self._email_scan()
+        except Exception as exc:
+            log.exception("Scheduled email scan failed")
+            return f"Email scan failed: {str(exc)[:200] or type(exc).__name__}"
+        message = f"{result.get('new_count', 0)} new job emails"
+        if result.get("errors"):
+            message += f" ({len(result['errors'])} inbox(es) failed — reconnect in Email jobs)"
+        log.info("Scheduled email scan: %s", message)
+        return message
 
     async def _loop(self) -> None:
         await asyncio.sleep(STARTUP_DELAY)

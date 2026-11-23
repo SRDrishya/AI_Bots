@@ -72,6 +72,11 @@ class EnvSettings:
     adzuna_app_key: str
     rapidapi_key: str
     serpapi_key: str
+    google_oauth_client_id: str
+    google_oauth_client_secret: str
+    microsoft_oauth_client_id: str
+    microsoft_oauth_client_secret: str
+    email_oauth_redirect_base: str
     host: str
     port: int
     data_dir: Path
@@ -87,6 +92,8 @@ def _ai_provider() -> str:
 
 def get_env_settings() -> EnvSettings:
     load_dotenv(dotenv_path=BASE_DIR / ".env", override=False)
+    port = int(os.getenv("PORT", "8000").strip() or "8000")
+    email_redirect_base = os.getenv("EMAIL_OAUTH_REDIRECT_BASE", "").strip().rstrip("/")
     return EnvSettings(
         gemini_api_key=os.getenv("GEMINI_API_KEY", "").strip(),
         gemini_model=os.getenv("GEMINI_MODEL", DEFAULT_GEMINI_MODEL).strip() or DEFAULT_GEMINI_MODEL,
@@ -103,7 +110,12 @@ def get_env_settings() -> EnvSettings:
         adzuna_app_key=os.getenv("ADZUNA_APP_KEY", "").strip(),
         rapidapi_key=os.getenv("RAPIDAPI_KEY", "").strip(),
         serpapi_key=os.getenv("SERPAPI_KEY", "").strip(),
+        google_oauth_client_id=os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip(),
+        google_oauth_client_secret=os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip(),
+        microsoft_oauth_client_id=os.getenv("MICROSOFT_OAUTH_CLIENT_ID", "").strip(),
+        microsoft_oauth_client_secret=os.getenv("MICROSOFT_OAUTH_CLIENT_SECRET", "").strip(),
+        email_oauth_redirect_base=email_redirect_base or f"http://127.0.0.1:{port}",
         host=os.getenv("HOST", "127.0.0.1").strip() or "127.0.0.1",
-        port=int(os.getenv("PORT", "8000").strip() or "8000"),
+        port=port,
         data_dir=Path(os.getenv("DATA_DIR", "").strip() or BASE_DIR / "data"),
     )

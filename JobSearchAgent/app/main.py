@@ -7,17 +7,20 @@ import logging
 from contextlib import asynccontextmanager
 from datetime import date
 from pathlib import Path
+from urllib.parse import urlencode
 
 from fastapi import FastAPI, File, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, Response
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from app.config import BASE_DIR, MAX_RESUME_BYTES
+from app.config import BASE_DIR, MAX_RESUME_BYTES, get_env_settings
 from app.models import (
     ApplicationKit,
     ApplicationKitRequest,
     CombinedSearch,
+    EmailAccountsResponse,
+    EmailJobsResponse,
     CompanyInsightsRequest,
     CompanyInsightsResponse,
     CompanyLink,
@@ -40,6 +43,7 @@ from app.models import (
 from app.services import export
 from app.services.coaching import KitCache, generate_kit
 from app.services.company import InsightCache, generate_insight, quick_links
+from app.services.email_jobs import EmailIntegrationError, EmailJobService
 from app.services.ai import NO_KEY_HINT, ai_available, describe as describe_ai
 from app.services.gemini import GeminiError
 from app.services.resume import ResumeParseError, analyze_text, extract_text
@@ -84,7 +88,16 @@ class ScheduleUpdate(BaseModel):
 
 def create_app(storage: Storage | None = None, start_scheduler: bool = True) -> FastAPI:
     store = storage or get_storage()
-    scheduler = SearchScheduler(store)
+    settings = get_env_settings()
+    email_jobs = EmailJobService(
+        store,
+        google_client_id=settings.google_oauth_client_id,
+        google_client_secret=settings.google_oauth_client_secret,
+        microsoft_client_id=settings.microsoft_oauth_client_id,
+        microsoft_client_secret=settings.microsoft_oauth_client_secret,
+        redirect_base=settings.email_oauth_redirect_base,
+    )
+    scheduler = SearchScheduler(store, email_scan=email_jobs.scan)
     background: set[asyncio.Task] = set()
 
     @asynccontextmanager
@@ -99,6 +112,7 @@ def create_app(storage: Storage | None = None, start_scheduler: bool = True) -> 
     app = FastAPI(title="Job Search Agent", version="0.1.0", lifespan=lifespan)
     app.state.storage = store
     app.state.scheduler = scheduler
+    app.state.email_jobs = email_jobs
 
     @app.exception_handler(ValueError)
     async def value_error(_: Request, exc: ValueError):
@@ -123,6 +137,63 @@ def create_app(storage: Storage | None = None, start_scheduler: bool = True) -> 
             schedule=scheduler.status(),
             tracker=store.tracker_stats(),
         )
+
+    # ------------------------------------------------------------------ email job opportunities
+    @app.get("/api/emails/accounts", response_model=EmailAccountsResponse)
+    def email_accounts() -> EmailAccountsResponse:
+        try:
+            return email_jobs.accounts()
+        except EmailIntegrationError as exc:
+            raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    @app.get("/api/emails/connect/{provider}")
+    def connect_email(provider: str) -> RedirectResponse:
+        try:
+            return RedirectResponse(email_jobs.begin_auth(provider), status_code=302)
+        except EmailIntegrationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/emails/oauth/{provider}/callback")
+    async def email_oauth_callback(
+        provider: str,
+        code: str | None = None,
+        state: str | None = None,
+        error: str | None = None,
+    ) -> RedirectResponse:
+        if error:
+            message = "Email sign-in was cancelled or denied"
+        elif not code or not state:
+            message = "Email sign-in did not return the required authorization details"
+        else:
+            try:
+                await email_jobs.finish_auth(provider, code, state)
+                return RedirectResponse("/?email_connected=1#email", status_code=303)
+            except EmailIntegrationError as exc:
+                message = str(exc)
+        return RedirectResponse(f"/?{urlencode({'email_error': message[:240]})}#email", status_code=303)
+
+    @app.delete("/api/emails/accounts/{provider}", status_code=204)
+    async def disconnect_email(provider: str) -> Response:
+        try:
+            await email_jobs.disconnect(provider)
+        except EmailIntegrationError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        return Response(status_code=204)
+
+    @app.get("/api/emails/jobs", response_model=EmailJobsResponse)
+    def email_job_opportunities() -> EmailJobsResponse:
+        """Job emails saved by earlier scans (no mailbox access)."""
+        return email_jobs.saved_opportunities()
+
+    @app.post("/api/emails/scan", response_model=EmailJobsResponse)
+    async def scan_email_jobs(
+        full: bool = Query(default=False, description="Ignore the last scan time and look back `days`"),
+        days: int = Query(default=7, ge=1, le=365, description="Window for first/full scans"),
+        limit: int = Query(default=100, ge=1, le=200),
+    ) -> EmailJobsResponse:
+        # Only mail since each account's previous scan is fetched. Per-account failures come back
+        # in `errors` so one broken inbox doesn't hide the other.
+        return await email_jobs.scan(full=full, days=days, limit=limit)
 
     # ------------------------------------------------------------------ resume / profile
     @app.post("/api/resume", response_model=ResumeUploadResult)

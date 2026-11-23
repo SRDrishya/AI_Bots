@@ -235,6 +235,51 @@ class CompanyInsightsResponse(BaseModel):
     ai_error: str = ""                     # why there's no AI insight (links still work)
 
 
+class EmailAccount(BaseModel):
+    provider: Literal["google", "microsoft"]
+    email: str = ""
+    configured: bool
+    connected: bool
+
+
+class EmailAccountsResponse(BaseModel):
+    accounts: list[EmailAccount]
+
+
+class EmailJobLink(BaseModel):
+    label: str
+    url: str
+
+
+class EmailJobOpportunity(BaseModel):
+    id: str
+    provider: Literal["google", "microsoft"]
+    account: str
+    portal: str
+    subject: str
+    sender: str
+    received_at: str = ""
+    preview: str = ""
+    links: list[EmailJobLink] = Field(default_factory=list)
+    message_url: str = ""
+    first_seen_at: str = ""
+    is_new: bool = False                   # found by the scan that produced this response
+
+
+class EmailSearchError(BaseModel):
+    provider: Literal["google", "microsoft"]
+    account: str = ""
+    message: str
+
+
+class EmailJobsResponse(BaseModel):
+    jobs: list[EmailJobOpportunity] = Field(default_factory=list)
+    errors: list[EmailSearchError] = Field(default_factory=list)  # accounts that couldn't be searched
+    new_count: int = 0
+    last_scan_at: str = ""
+    scanned_since: dict[str, str] = Field(default_factory=dict)   # provider -> start of the window searched
+
+
 KitTone = Literal["professional", "warm", "concise"]
 
 

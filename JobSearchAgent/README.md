@@ -58,6 +58,8 @@ Then open `.env` and fill in the keys you have. **All are optional:**
 | `RAPIDAPI_KEY` | **JSearch** — Chennai jobs from LinkedIn, Naukri, Shine, company sites | https://rapidapi.com → subscribe to *JSearch* | 200 calls/month |
 | `SERPAPI_KEY` | **Google Jobs** — Chennai jobs | https://serpapi.com | 250 searches/month |
 | `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` | **Adzuna India** | https://developer.adzuna.com | yes |
+| `GOOGLE_OAUTH_CLIENT_ID` + `GOOGLE_OAUTH_CLIENT_SECRET` | Connect a Gmail inbox for job-alert emails | Google Cloud Console (see below) | yes |
+| `MICROSOFT_OAUTH_CLIENT_ID` + `MICROSOFT_OAUTH_CLIENT_SECRET` | Connect a Hotmail/Outlook inbox for job-alert emails | Microsoft Entra admin center (see below) | yes |
 
 Without any keys you still get remote jobs from Himalayas, Remotive, Jobicy, Arbeitnow and company
 career boards, scored locally — but very few Chennai-office jobs. **JSearch and SerpAPI are the
@@ -77,6 +79,46 @@ Other settings in `.env` (defaults are fine):
 | `AI_PROVIDER` | `gemini` | `gemini` or `anthropic`: which AI to try first. If it fails (quota, rate limit, overload) and the other has a key, the app switches automatically |
 | `HOST` / `PORT` | `127.0.0.1` / `8000` | Where the web app is served |
 | `DATA_DIR` | `./data` | Where your profile, results and tracker are saved |
+
+### Email jobs: Gmail and Hotmail/Outlook
+
+The **Email jobs** tab searches connected inboxes for job-related messages from LinkedIn, Indeed
+and Naukri, then lists the message, date, preview and detected job links. It uses read-only OAuth;
+it never asks for your mailbox password, changes messages, or sends email contents to an AI service.
+OAuth refresh tokens are kept in the operating system's credential store; provider client secrets
+belong only in your private `.env`.
+
+Set up OAuth once for each provider:
+
+1. **Google:** In Google Cloud Console, create/select a project, enable the Gmail API, configure
+   the OAuth consent screen (add your Gmail account as a test user if the app is in testing), and
+   create an OAuth client ID of type **Web application**. Add this authorized redirect URI:
+   `http://127.0.0.1:8000/api/emails/oauth/google/callback`.
+2. **Microsoft:** In Microsoft Entra admin center, register an app that supports personal Microsoft
+   accounts. Add a **Web** redirect URI:
+   `http://127.0.0.1:8000/api/emails/oauth/microsoft/callback`. Create a client secret and add
+   Microsoft Graph's delegated `User.Read` and `Mail.Read` permissions.
+3. Copy each provider's client ID and secret into the matching `GOOGLE_OAUTH_*` and
+   `MICROSOFT_OAUTH_*` entries in `.env`, then restart the app. In the **Email jobs** tab, connect
+   Gmail and Hotmail/Outlook separately, approve read-only access, choose a date range and click
+   **Search emails**.
+
+Email checks are incremental: each account remembers when it was last checked, and the next check
+only reads mail received after that (with a 1-hour overlap so nothing slips through). The first
+check of a newly connected account looks back 7 days. The daily scheduled search also checks for new
+job emails, so normally you just open the tab and see the day's new ones marked **New**. Found
+emails are saved locally (`data/email_scan.json`) for 60 days; **Rescan** re-reads the last 7/30/90
+days if you ever need to. Disconnecting an account removes its saved results.
+
+Both inboxes are searched in parallel. If one fails (for example an expired sign-in), the other's
+results are still listed with an error note for the failed account — reconnect it to fix. LinkedIn
+social mail (connection invites, newsletters, group posts) is skipped; Indeed employer replies
+(`indeedemail.com`) are included.
+
+If you run the app on another port, the redirect base defaults to `http://127.0.0.1:<PORT>`. Set
+`EMAIL_OAUTH_REDIRECT_BASE` to the exact local base URL if needed, and register the matching
+callback URI with both providers. Disconnecting an account
+removes its saved refresh token from the operating-system credential store.
 
 ## 4. Run
 

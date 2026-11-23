@@ -89,6 +89,7 @@
              border-radius: 50%; animation: spin .8s linear infinite; vertical-align: -2px; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .empty { text-align: center; padding: 30px; color: var(--muted); }
+  .email-card { border-top: 1px solid var(--line); padding: 12px 0; }
   a.btn { text-decoration: none; color: inherit; display: inline-block; }
   dialog { border: 1px solid var(--line); border-radius: 14px; background: var(--panel); color: var(--text);
            width: min(860px, calc(100vw - 32px)); max-height: calc(100vh - 48px); padding: 0; }
@@ -146,6 +147,7 @@
       <button data-tab="matches" class="active">Matches</button>
       <button data-tab="tracker">Tracker <span id="tracker-count" class="muted"></span></button>
       <button data-tab="history">History</button>
+      <button data-tab="email">Email jobs</button>
       <button data-tab="settings">Schedule &amp; sources</button>
     </nav>
     <span class="grow"></span>
@@ -227,6 +229,29 @@
     <div class="panel">
       <h2>Search history <span class="muted small">(last 20 · click to open)</span></h2>
       <div style="overflow-x:auto"><table id="history-table"></table></div>
+    </div>
+  </section>
+
+  <!-- ============================ EMAIL JOBS ============================ -->
+  <section id="tab-email" class="hidden">
+    <div class="panel">
+      <h2>Email accounts</h2>
+      <p class="muted small" style="margin-top:0">Connect Gmail and Outlook/Hotmail with read-only access. Sign-in tokens stay in your operating-system credential store.</p>
+      <div id="email-accounts"></div>
+    </div>
+    <div class="panel">
+      <div class="row" style="margin-bottom:10px">
+        <h2 style="margin:0">Job opportunities from email</h2>
+        <span class="grow"></span>
+        <button class="btn primary" id="email-scan" title="Only fetches mail received since the last check">Check new emails</button>
+        <label class="inline small muted">or rescan last
+          <select id="email-days"><option value="7" selected>7 days</option><option value="30">30 days</option><option value="90">90 days</option></select>
+        </label>
+        <button class="btn sm" id="email-rescan">Rescan</button>
+      </div>
+      <p class="muted small" style="margin-top:0">Finds job-related messages from LinkedIn, Indeed and Naukri. Each check only reads mail received since the previous one (the daily schedule checks automatically); results are kept here for 60 days. Email contents are scanned locally by the app and aren't sent to an AI service.</p>
+      <div id="email-scan-info" class="muted small" style="margin-bottom:6px"></div>
+      <div id="email-results"><div class="empty">Connect an account, then check your emails.</div></div>
     </div>
   </section>
 
@@ -369,7 +394,8 @@ const STATUSES = ["saved", "applied", "interviewing", "offer", "rejected", "dism
 const STATUS_LABEL = { saved: "Saved", applied: "Applied", interviewing: "Interviewing", offer: "Offer", rejected: "Rejected", dismissed: "Dismissed" };
 
 // ---------------------------------------------------------------- state
-const state = { status: null, profile: null, search: null, filter: "all", sort: "score", trackerFilter: "active" };
+const state = { status: null, profile: null, search: null, filter: "all", sort: "score", trackerFilter: "active",
+  emailAccounts: [], emailJobs: [], emailErrors: [] };
 
 // ---------------------------------------------------------------- tabs
 $$("#tabs button").forEach(b => b.addEventListener("click", () => showTab(b.dataset.tab)));
@@ -381,6 +407,7 @@ function showTab(name) {
   $$("main > section").forEach(s => s.classList.toggle("hidden", s.id !== `tab-${name}`));
   if (name === "tracker") loadTracker();
   if (name === "history") loadHistory();
+  if (name === "email") { loadEmailAccounts(); loadSavedEmailJobs(); }
   if (name === "settings") renderSettings();
 }
 
@@ -1140,7 +1167,7 @@ function renderScheduleState() {
     sc.settings.enabled && !sc.running ? h("div", {}, "Next run: ", h("b", {}, fmtDateTime(sc.next_run_at))) : null,
     st.last_attempt_at ? h("div", {}, "Last run: ", fmtDateTime(st.last_attempt_at), " — ",
       h("span", { class: "chip " + (st.last_status === "ok" ? "good" : st.last_status === "error" ? "bad" : "warn") }, st.last_status),
-      " ", st.last_message, st.last_search_id ? [" · ", h("a", { href: "#", onclick: e => { e.preventDefault(); openSearch(st.last_search_id); } }, "open results")] : null)
+      " ", st.last_message, st.last_email_message ? ` · ${st.last_email_message}` : "", st.last_search_id ? [" · ", h("a", { href: "#", onclick: e => { e.preventDefault(); openSearch(st.last_search_id); } }, "open results")] : null)
       : h("div", { class: "muted" }, "Hasn't run yet."));
 }
 $("#sc-save").addEventListener("click", async () => {
@@ -1172,13 +1199,122 @@ async function pollSchedule() {
   } finally { polling = false; }
 }
 
+// ---------------------------------------------------------------- email opportunities
+function renderEmailAccounts() {
+  const root = $("#email-accounts");
+  clear(root, state.emailAccounts.map(account => {
+    const label = account.provider === "google" ? "Gmail" : "Hotmail / Outlook";
+    const actions = account.connected
+      ? [h("span", { class: "chip good" }, `Connected: ${account.email}`),
+        h("button", { class: "btn sm", onclick: async () => {
+          try {
+            await api(`/api/emails/accounts/${account.provider}`, { method: "DELETE" });
+            await loadEmailAccounts();
+            toast(`${label} disconnected`);
+          } catch (e) { toast(e.message, true); }
+        } }, "Disconnect")]
+      : account.configured
+        ? [h("a", { class: "btn sm primary", href: `/api/emails/connect/${account.provider}` }, `Connect ${label}`)]
+        : [h("span", { class: "muted small" }, "Add this provider's OAuth client ID and secret to .env, then restart the app.")];
+    return h("div", { class: "email-card row" },
+      h("strong", {}, label), h("span", { class: "grow" }), ...actions);
+  }));
+}
+
+async function loadEmailAccounts() {
+  try {
+    const response = await api("/api/emails/accounts");
+    state.emailAccounts = response.accounts;
+    renderEmailAccounts();
+  } catch (e) {
+    clear($("#email-accounts"), h("div", { class: "chip bad" }, e.message));
+  }
+}
+
+function renderEmailJobs() {
+  const root = $("#email-results");
+  const errors = state.emailErrors.map(err => h("div", { class: "chip bad", style: "display:block;margin-bottom:8px" },
+    `${err.provider === "google" ? "Gmail" : "Hotmail / Outlook"}${err.account ? ` (${err.account})` : ""}: ${err.message}`));
+  if (!state.emailJobs.length) {
+    clear(root, [...errors, h("div", { class: "empty" }, "No job emails found yet.")]);
+    return;
+  }
+  const counts = {};
+  const newCount = state.emailJobs.filter(job => job.is_new).length;
+  state.emailJobs.forEach(job => { counts[job.portal] = (counts[job.portal] || 0) + 1; });
+  const summary = h("div", { class: "muted small", style: "margin-bottom:6px" },
+    `${state.emailJobs.length} job emails` + (newCount ? ` (${newCount} new)` : "") + " · " + Object.entries(counts).map(([p, n]) => `${p}: ${n}`).join(" · "));
+  clear(root, [...errors, summary, ...state.emailJobs.map(job => h("article", { class: "email-card" },
+    h("div", { class: "row" },
+      h("span", { class: "chip accent" }, job.portal),
+      job.is_new ? h("span", { class: "chip good" }, "New") : null,
+      h("span", { class: "muted small" }, `${job.account} · ${fmtDateTime(job.received_at)}`)),
+    h("h3", { style: "margin:6px 0 2px" },
+      job.message_url
+        ? h("a", { href: job.message_url, target: "_blank", rel: "noopener noreferrer" }, job.subject)
+        : job.subject),
+    h("div", { class: "muted small" }, job.sender),
+    job.preview ? h("p", { class: "reason" }, job.preview) : null,
+    job.links.length ? h("div", { class: "actions" },
+      job.links.map(link => h("a", { class: "btn sm", href: link.url, target: "_blank", rel: "noopener noreferrer" }, link.label)))
+      : null))]);
+}
+
+function renderEmailScanInfo(response) {
+  const parts = [];
+  if (response.last_scan_at) parts.push(`Last checked ${fmtDateTime(response.last_scan_at)}`);
+  Object.entries(response.scanned_since || {}).forEach(([p, since]) =>
+    parts.push(`${p === "google" ? "Gmail" : "Hotmail"} since ${fmtDateTime(since)}`));
+  $("#email-scan-info").textContent = parts.join(" · ");
+}
+
+async function loadSavedEmailJobs() {
+  try {
+    const response = await api("/api/emails/jobs");
+    state.emailJobs = response.jobs;
+    state.emailErrors = [];
+    renderEmailScanInfo(response);
+    if (response.jobs.length || response.last_scan_at) renderEmailJobs();
+  } catch (e) { /* the accounts panel already reports problems */ }
+}
+
+async function searchEmailJobs(full) {
+  const buttons = [$("#email-scan"), $("#email-rescan")];
+  buttons.forEach(b => b.disabled = true);
+  clear($("#email-results"), h("div", { class: "empty" }, h("span", { class: "spinner" }),
+    full ? " Rescanning connected inboxes…" : " Checking for new job emails…"));
+  try {
+    const query = full ? `full=true&days=${encodeURIComponent($("#email-days").value)}` : "full=false&days=7";
+    const response = await api(`/api/emails/scan?${query}&limit=100`, { method: "POST" });
+    state.emailJobs = response.jobs;
+    state.emailErrors = response.errors;
+    renderEmailScanInfo(response);
+    renderEmailJobs();
+    if (response.errors.length) toast(`${response.errors.length} inbox(es) couldn't be searched`, true);
+    else toast(response.new_count ? `${response.new_count} new job email(s)` : "No new job emails");
+  } catch (e) {
+    clear($("#email-results"), h("div", { class: "chip bad" }, e.message));
+    toast(e.message, true);
+  } finally {
+    buttons.forEach(b => b.disabled = false);
+  }
+}
+$("#email-scan").addEventListener("click", () => searchEmailJobs(false));
+$("#email-rescan").addEventListener("click", () => searchEmailJobs(true));
+
 // ---------------------------------------------------------------- boot
 (async function boot() {
   try {
     await Promise.all([loadStatus(), loadProfile(), loadTailoredIndex()]);
     await loadLatestSearch();
     if (state.status.schedule.running) pollSchedule();
-    if (location.hash.length > 1) showTab(location.hash.slice(1));
+    const params = new URLSearchParams(location.search);
+    if (params.has("email_connected")) toast("Email account connected");
+    if (params.has("email_error")) toast(params.get("email_error"), true);
+    if (params.has("email_connected") || params.has("email_error")) {
+      history.replaceState(null, "", `${location.pathname}#email`);
+      showTab("email");
+    } else if (location.hash.length > 1) showTab(location.hash.slice(1));
   } catch (e) { toast("Couldn't reach the app server: " + e.message, true); }
   setInterval(() => loadStatus().catch(() => {}), 60000);
 })();

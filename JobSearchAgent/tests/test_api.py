@@ -52,6 +52,20 @@ def test_status_without_keys(client):
     assert s["schedule"]["settings"]["run_time"] == "08:00"
 
 
+def test_email_routes_are_read_only_and_require_oauth_configuration(client, monkeypatch):
+    monkeypatch.setattr("app.services.email_jobs.keyring.get_password", lambda *args: None)
+
+    accounts = client.get("/api/emails/accounts")
+    assert accounts.status_code == 200
+    assert [a["provider"] for a in accounts.json()["accounts"]] == ["google", "microsoft"]
+    assert all(not a["configured"] and not a["connected"] for a in accounts.json()["accounts"])
+    assert client.get("/api/emails/connect/google").status_code == 400
+    saved = client.get("/api/emails/jobs").json()
+    assert saved["jobs"] == [] and saved["errors"] == [] and saved["new_count"] == 0
+    scan = client.post("/api/emails/scan").json()
+    assert scan["jobs"] == [] and scan["scanned_since"] == {}
+
+
 def test_search_requires_profile(client):
     r = client.post("/api/search", json={})
     assert r.status_code == 400 and "resume" in r.json()["detail"].lower()

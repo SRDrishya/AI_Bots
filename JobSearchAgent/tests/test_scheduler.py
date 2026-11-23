@@ -138,3 +138,23 @@ async def test_background_loop_runs_when_due_and_stops(store, monkeypatch):
     await s.stop()
     assert len(calls) == 1  # ran once for the slot, then idle
     assert s.status().state.last_status == "ok"
+
+
+async def test_daily_run_also_checks_new_job_emails(store):
+    clock, calls, scans = Clock("2026-11-22T03:00:00+00:00"), [], []
+
+    async def fake_run(request, storage, trigger):
+        raise RuntimeError("job boards down")   # email scan must still run
+
+    async def fake_scan():
+        scans.append(1)
+        return {"new_count": 4, "errors": []}
+
+    s = SearchScheduler(store, run=fake_run, clock=clock, email_scan=fake_scan)
+    state = await s.run_now()
+    assert scans == [] and state.last_email_message == ""        # no inbox connected -> skipped
+
+    store.save_doc("email_accounts.json", {"google": "me@gmail.com"})
+    state = await s.run_now()
+    assert scans == [1] and state.last_status == "error"
+    assert state.last_email_message == "4 new job emails"
