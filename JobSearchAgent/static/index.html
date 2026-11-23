@@ -100,6 +100,36 @@
   .kit h4 { margin: 18px 0 6px; font-size: 13px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
   .kit ul { margin: 0; padding-left: 20px; }
   .kit li { margin: 4px 0; }
+  /* ---- tailored resume */
+  dialog.wide { width: min(1040px, calc(100vw - 32px)); }
+  .tr-bar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-bottom: 12px; }
+  .tr-note { border-radius: 8px; padding: 8px 12px; margin: 0 0 10px; font-size: 13px; }
+  .tr-note.warn { background: var(--warn-soft); color: var(--warn); }
+  .tr-grid { display: grid; grid-template-columns: 1fr 270px; gap: 16px; align-items: start; }
+  .tr-side { position: sticky; top: 70px; font-size: 13px; }
+  .tr-side h4:first-child { margin-top: 0; }
+  .paper { background: #fff; color: #1a1a1a; border: 1px solid var(--line); border-radius: 6px; padding: 30px 36px;
+           font: 13px/1.38 Calibri, Carlito, Arial, sans-serif; box-shadow: 0 2px 10px rgba(0,0,0,.08); }
+  .paper .p-name { font-size: 24px; font-weight: 700; text-align: center; }
+  .paper .p-center { text-align: center; }
+  .paper .p-sec { margin: 12px 0 4px; font-weight: 700; font-size: 14px; text-transform: uppercase; border-bottom: 1px solid #444; display: flex; }
+  .paper .p-row { display: flex; gap: 10px; margin-top: 6px; align-items: baseline; }
+  .paper .p-row > .grow { min-width: 0; }
+  .paper .p-right { white-space: nowrap; text-align: right; }
+  .paper .p-bul { display: flex; gap: 6px; padding-left: 4px; }
+  .paper .p-bul::before { content: "•"; }
+  .paper .p-bul > .ed { flex: 1; }
+  .paper b, .paper .b { font-weight: 700; }
+  .paper .i { font-style: italic; }
+  .ed { outline: none; border-radius: 3px; min-width: 1ch; }
+  .ed:hover { background: #eef3ff; }
+  .ed:focus { background: #e3ebff; box-shadow: 0 0 0 1px #9db4f0; }
+  .ed:empty::before { content: attr(data-ph); color: #9aa3b2; }
+  .x { visibility: hidden; border: 0; background: none; color: #b42318; cursor: pointer; font-size: 12px; padding: 0 3px; }
+  .p-bul:hover .x, .p-row:hover .x, .p-sec:hover .x, .p-entry:hover > .x-row .x { visibility: visible; }
+  .add { border: 0; background: none; color: #2f5fd0; cursor: pointer; font-size: 11px; padding: 0 0 0 14px; opacity: .55; }
+  .add:hover { opacity: 1; text-decoration: underline; }
+  @media (max-width: 860px) { .tr-grid { grid-template-columns: 1fr; } .tr-side { position: static; } .paper { padding: 18px; } }
   .hidden { display: none !important; }
   @media (max-width: 720px) {
     .tracker-item, .profile-grid { grid-template-columns: 1fr; }
@@ -256,6 +286,19 @@
   </div>
 </dialog>
 
+<dialog id="tr-dialog" class="wide">
+  <div class="dlg-head">
+    <div style="flex:1;min-width:0">
+      <div style="font-weight:600" id="tr-title"></div>
+      <div class="small muted" id="tr-sub"></div>
+    </div>
+    <span class="small muted" id="tr-saved"></span>
+    <button class="btn sm" id="tr-redo" title="Change the job description and let the AI prepare it again">Re-prepare</button>
+    <button class="btn sm" id="tr-close" aria-label="Close">✕</button>
+  </div>
+  <div class="dlg-body kit" id="tr-body"></div>
+</dialog>
+
 <script>
 "use strict";
 // ---------------------------------------------------------------- helpers
@@ -272,7 +315,7 @@ function h(tag, attrs = {}, ...children) {
     else if (k === "href") el.setAttribute("href", safeUrl(v));
     else el.setAttribute(k, v === true ? "" : v);
   }
-  for (const c of children.flat()) {
+  for (const c of children.flat(Infinity)) {
     if (c === null || c === undefined || c === false) continue;
     el.append(c instanceof Node ? c : document.createTextNode(String(c)));
   }
@@ -282,7 +325,7 @@ function safeUrl(u) {
   try { const url = new URL(u, location.href); return ["http:", "https:"].includes(url.protocol) ? url.href : "#"; }
   catch { return "#"; }
 }
-function clear(el, ...children) { el.replaceChildren(...children.flat().filter(Boolean)); return el; }
+function clear(el, ...children) { el.replaceChildren(...children.flat(Infinity).filter(Boolean)); return el; }
 
 async function api(path, opts = {}) {
   const init = { ...opts, headers: { ...(opts.body && !(opts.body instanceof FormData) ? { "Content-Type": "application/json" } : {}) } };
@@ -367,7 +410,7 @@ function renderHeader() {
     const left = quotaLeft(src);
     if (left !== null) chips.push(h("span", { class: "chip " + (left < 15 ? "warn" : ""), title: "Free API calls left" }, `${SOURCE_LABEL[src]}: ${left} left`));
   }
-  if (!s.gemini_configured) chips.push(h("span", { class: "chip warn", title: "Add GEMINI_API_KEY to .env for AI scoring" }, "AI scoring off"));
+  if (!s.gemini_configured) chips.push(h("span", { class: "chip warn", title: "Add GEMINI_API_KEY or ANTHROPIC_API_KEY to .env for AI scoring" }, "AI scoring off"));
   clear($("#header-chips"), chips);
 }
 
@@ -607,8 +650,9 @@ function jobCard(j) {
           onclick: () => setJobStatus(j, j.tracking_status === st ? null : st) },
           { saved: "★ Save", applied: "✓ Applied", dismissed: "✕ Not interested" }[st])),
         h("button", { class: "btn sm", onclick: () => openKit(j) }, "✉ Cover letter & tips"),
+        tailorButton(j),
         h("button", { class: "btn sm", onclick: () => openCompany(j) }, "🏢 Company"),
-        h("span", { class: "small muted" }, "Apply via: ", linkList)),
+        h("span",{ class: "small muted" }, "Apply via: ", linkList)),
       j.description ? h("details", {}, h("summary", {}, "Job description"), h("div", { class: "desc" }, j.description)) : null));
 }
 
@@ -642,7 +686,7 @@ function openKit(job) {
 async function loadKit(regenerate) {
   const job = kitJob, body = $("#kit-body"), tone = $("#kit-tone").value;
   if (!state.status?.gemini_configured) {
-    return clear(body, h("div", { class: "empty" }, "Cover letters need a Gemini API key — add GEMINI_API_KEY to .env and restart."));
+    return clear(body, h("div", { class: "empty" }, "Cover letters need an AI key — add GEMINI_API_KEY or ANTHROPIC_API_KEY to .env and restart."));
   }
   $("#kit-regen").disabled = true;
   clear(body, h("div", { class: "muted" }, h("span", { class: "spinner" }), " Writing a tailored cover letter from your resume… (10–40 seconds)"));
@@ -713,8 +757,8 @@ async function loadCompany(regenerate) {
 function renderCompany(i) {
   const list = items => items.length ? h("ul", {}, items.map(x => h("li", {}, x))) : h("div", { class: "muted small" }, "—");
   const badge = i.grounded
-    ? h("span", { class: "chip good" }, "Live Google data")
-    : h("span", { class: "chip warn", title: "Your Gemini key can't use Google Search, so this comes from the AI's own knowledge" }, "AI estimate — not checked against live data");
+    ? h("span", { class: "chip good" }, "Live web data")
+    : h("span", { class: "chip warn", title: "Live web search wasn't available, so this comes from the AI's own knowledge" }, "AI estimate — not checked against live data");
   clear($("#co-body"),
     h("div", { class: "row", style: "margin-top:14px" }, badge, h("span", { class: "small muted" }, `Generated ${ago(i.generated_at)}`)),
     !i.known ? h("p", { class: "chip warn", style: "display:block;margin-top:10px" },
@@ -735,9 +779,277 @@ function renderCompany(i) {
       h("li", {}, h("a", { href: s.url, target: "_blank", rel: "noopener" }, s.label))))] : null);
 }
 
+// ---------------------------------------------------------------- tailored resume
+const trDialog = $("#tr-dialog"), trBody = $("#tr-body");
+let trJob = null, trDraft = null, trSaveTimer = null, trEds = [], trFocus = null;
+state.tailored = {};  // job key -> TailoredResume (drafts that exist)
+
+$("#tr-close").addEventListener("click", () => trDialog.close());
+trDialog.addEventListener("close", () => { if (trSaveTimer) trFlush(); });
+$("#tr-redo").addEventListener("click", () => renderTailorSetup(trDraft?.job_description));
+
+const tailoredFileUrl = (key, name) => `/api/tailored-resume/${encodeURIComponent(key)}/files/${encodeURIComponent(name)}`;
+
+async function loadTailoredIndex() {
+  try { state.tailored = Object.fromEntries((await api("/api/tailored-resumes")).map(d => [d.job_key, d])); }
+  catch { state.tailored = {}; }
+}
+
+function tailorButton(j) {
+  const has = j.key && state.tailored[j.key];
+  return h("button", { class: "btn sm", onclick: () => openTailor(j),
+    title: has ? "Open your tailored resume for this job" : "AI rewrites your saved resume for this job description" },
+    has ? "📄 Tailored resume ✓" : "📄 Tailor resume");
+}
+
+function tailoredFileLinks(key) {
+  const files = state.tailored[key]?.files || [];
+  if (!files.length) return null;
+  return h("span", { class: "small" }, files.map(f => h("a", { href: tailoredFileUrl(key, f.filename),
+    title: `${f.filename} · ${fmtDateTime(f.created_at)}` }, "⬇ " + f.format.toUpperCase())).flatMap((a, i) => i ? [" · ", a] : [a]));
+}
+
+function refreshTailorButtons() {
+  if (state.search) renderJobs();
+  if (!$("#tab-tracker").classList.contains("hidden")) loadTracker();
+}
+
+async function openTailor(job) {
+  if (trSaveTimer) await trFlush();
+  trJob = job; trDraft = null;
+  $("#tr-title").textContent = `Tailored resume — ${job.title}`;
+  $("#tr-sub").textContent = `${job.company} · ${job.location}`;
+  $("#tr-saved").textContent = "";
+  $("#tr-redo").classList.add("hidden");
+  trDialog.showModal();
+  if (!state.status?.gemini_configured)
+    return clear(trBody, h("div", { class: "empty" }, "Tailored resumes need an AI key — add GEMINI_API_KEY or ANTHROPIC_API_KEY to .env and restart."));
+  if (!state.profile)
+    return clear(trBody, h("div", { class: "empty" }, "Upload your original resume first — it's the reference for every tailored version."));
+  clear(trBody, h("div", { class: "muted" }, h("span", { class: "spinner" }), " Loading…"));
+  if (job.key) {
+    try {
+      const d = await api(`/api/tailored-resume/${encodeURIComponent(job.key)}`);
+      if (job === trJob) showDraft(d);
+      return;
+    } catch (e) { if (e.status !== 404 && job === trJob) toast(e.message, true); }
+  }
+  if (job === trJob) renderTailorSetup();
+}
+
+function renderTailorSetup(prefill) {
+  const job = trJob, redo = !!trDraft;
+  const jd = h("textarea", { rows: 14, placeholder: "Paste the full job description here…" }, prefill ?? job.description ?? "");
+  const hint = h("div", { class: "tr-note warn" }, "This description looks short or cut off. For a better result, open the job page, copy the full description and paste it here. ",
+    h("a", { href: job.url, target: "_blank", rel: "noopener" }, "Open job page ↗"));
+  const update = () => hint.classList.toggle("hidden", jd.value.trim().length >= 600);
+  jd.addEventListener("input", update);
+  $("#tr-redo").classList.add("hidden");
+  clear(trBody,
+    h("p", { class: "muted", style: "margin-top:0" }, "The AI rewrites your saved original resume for this job: it reorders, rewords and brings forward matching keywords, using only facts from your resume. ",
+      "You get an editable one-page preview first. Files are created only when you click Generate."),
+    h("h4", {}, "Job description"), hint, jd,
+    h("div", { class: "row", style: "margin-top:10px" },
+      h("button", { class: "btn primary", onclick: () => prepareTailored(jd.value, redo) }, redo ? "Re-prepare (replaces your edits)" : "✨ Prepare tailored resume"),
+      redo ? h("button", { class: "btn", onclick: () => showDraft(trDraft) }, "Cancel") : null));
+  update();
+}
+
+async function prepareTailored(jdText, regenerate) {
+  const job = trJob;
+  clear(trBody, h("div", { class: "muted" }, h("span", { class: "spinner" }), " Tailoring your resume to this job… (20–60 seconds)"));
+  try {
+    const d = await api("/api/tailored-resume", { method: "POST", body: { job, job_description: jdText.trim(), regenerate } });
+    state.tailored[d.job_key] = d;
+    if (!job.key) job.key = d.job_key;
+    if (job === trJob) showDraft(d);
+    refreshTailorButtons();
+  } catch (e) { if (job === trJob) { toast(e.message, true); renderTailorSetup(jdText); } }
+}
+
+function showDraft(d) {
+  trDraft = d;
+  $("#tr-redo").classList.remove("hidden");
+  $("#tr-saved").textContent = d.updated_at ? `Saved ${ago(d.updated_at)}` : "";
+  clear(trBody,
+    h("div", { class: "tr-bar", id: "tr-bar" }),
+    h("div", { id: "tr-warn" }),
+    h("div", { class: "tr-grid" },
+      h("div", {},
+        h("div", { class: "small muted", style: "margin-bottom:6px" }, "Click any text to edit it. Enter adds a bullet, ✕ removes one. Changes save automatically."),
+        h("div", { class: "paper", id: "tr-paper" })),
+      h("div", { class: "tr-side", id: "tr-side" })));
+  renderPaper(); renderTailorInfo();
+}
+
+function renderTailorInfo() {
+  const d = trDraft, c = d.coverage, f = d.fit;
+  const list = items => items.length ? h("ul", {}, items.map(i => h("li", {}, i))) : h("div", { class: "muted small" }, "—");
+  clear($("#tr-bar"),
+    c.total ? h("span", { class: "chip " + (c.after > c.before ? "good" : ""), title: "Important job-description keywords found: original → tailored" },
+      `JD keywords: ${c.before}/${c.total} → ${c.after}/${c.total}`) : null,
+    h("span", { class: "chip " + (f.fits ? "good" : "bad") },
+      f.fits ? `Fits on 1 page (${f.font_size}pt)` : `${f.pages} pages even at ${f.font_size}pt — remove some bullets`),
+    h("span", { class: "grow" }),
+    h("button", { class: "btn primary", onclick: e => trGenerate("pdf", e.currentTarget) }, "⬇ Generate PDF"),
+    h("button", { class: "btn primary", onclick: e => trGenerate("docx", e.currentTarget) }, "⬇ Generate DOCX"));
+  clear($("#tr-warn"), d.warnings.map(w => h("div", { class: "tr-note warn" }, "⚠ ", w)));
+  clear($("#tr-side"),
+    h("h4", {}, "Keywords from the job"),
+    c.keywords.length ? h("div", { class: "skills" }, c.keywords.map(k => h("span", {
+      class: "chip " + (k.in_tailored ? "good" : "warn"),
+      title: k.in_tailored ? (k.in_original ? "In your original and tailored resume" : "Brought forward by tailoring") : "Not in the tailored resume" },
+      (k.in_tailored ? "✓ " : "✗ ") + k.term + (k.in_tailored && !k.in_original ? " ★" : "")))) : list([]),
+    h("div", { class: "small muted" }, "★ = newly visible after tailoring"),
+    h("h4", {}, "Gaps — not added"),
+    d.gaps.length ? h("div", { class: "small muted" }, "The job asks for these but your resume doesn't show them. Add one only if it's true.") : null,
+    list(d.gaps),
+    h("h4", {}, "What the AI changed"), list(d.changes),
+    d.files.length ? [h("h4", {}, "Generated files"), h("ul", {}, d.files.map(x => h("li", {},
+      h("a", { href: tailoredFileUrl(d.job_key, x.filename) }, x.filename),
+      h("div", { class: "small muted" }, fmtDateTime(x.created_at)))))] : null);
+}
+
+// ---- editable preview
+function ed(obj, key, ph, cls = "", opts = {}) {
+  const el = h("span", { class: "ed " + cls, contenteditable: "true", "data-ph": ph }, opts.text ?? obj[key] ?? "");
+  el._ref = [obj, key];
+  el.addEventListener("input", () => {
+    const text = el.innerText.replace(/\s+/g, " ").trim();
+    obj[key] = opts.list ? text.split(",").map(s => s.trim()).filter(Boolean) : text;
+    trChanged();
+  });
+  el.addEventListener("paste", e => {
+    e.preventDefault();
+    document.execCommand("insertText", false, e.clipboardData.getData("text/plain").replace(/\s+/g, " "));
+  });
+  el.addEventListener("keydown", e => {
+    if (e.key === "Enter") { e.preventDefault(); opts.onEnter?.(); }
+    else if (e.key === "Backspace" && !el.innerText.trim() && opts.onEmptyBackspace) { e.preventDefault(); opts.onEmptyBackspace(); }
+  });
+  trEds.push(el);
+  return el;
+}
+
+function bulletList(arr) {
+  const edit = (fn, focus) => { fn(); trFocus = focus; trChanged(true); };
+  return [
+    arr.map((b, i) => h("div", { class: "p-bul" },
+      ed(arr, i, "Describe what you did and the result…", "", {
+        onEnter: () => edit(() => arr.splice(i + 1, 0, ""), [arr, i + 1]),
+        onEmptyBackspace: () => edit(() => arr.splice(i, 1), i ? [arr, i - 1] : null) }),
+      h("button", { class: "x", title: "Remove bullet", onclick: () => edit(() => arr.splice(i, 1), null) }, "✕"))),
+    h("button", { class: "add", onclick: () => edit(() => arr.push(""), [arr, arr.length]) }, "+ bullet")];
+}
+
+function renderPaper() {
+  const r = trDraft.resume, c = r.contact;
+  trEds = [];
+  const changed = fn => () => { fn(); trChanged(true); };
+  const sec = (title, onAdd, addLabel) => h("div", { class: "p-sec" }, h("span", { class: "grow" }, title),
+    onAdd ? h("button", { class: "add", onclick: changed(onAdd) }, addLabel) : null);
+  const remove = (arr, i, what) => h("button", { class: "x", title: `Remove this ${what}`,
+    onclick: () => { if (confirm(`Remove this ${what} from the tailored resume?`)) { arr.splice(i, 1); trChanged(true); } } }, "✕");
+  const entry = (arr, i, left, right, what, bullets) => h("div", { class: "p-entry" },
+    h("div", { class: "p-row" }, h("div", { class: "grow" }, left), h("div", { class: "p-right" }, right), remove(arr, i, what)),
+    bullets ? bulletList(bullets) : null);
+
+  const sections = {
+    summary: [sec("Professional Summary"), h("div", {}, ed(r, "summary", "2–3 line summary aimed at this role"))],
+    skills: [sec("Skills", () => r.skills.push({ category: "", items: [] }), "+ group"),
+      r.skills.map((g, i) => h("div", { class: "p-row", style: "margin-top:1px" },
+        h("div", { class: "grow" }, h("span", { class: "b" }, ed(g, "category", "Category")), ": ",
+          ed(g, "items", "skill, skill, …", "", { list: true, text: g.items.join(", ") })),
+        remove(r.skills, i, "skill group")))],
+    experience: [sec("Experience", () => r.experience.push({ title: "", company: "", location: "", dates: "", bullets: [""] }), "+ role"),
+      r.experience.map((e, i) => entry(r.experience, i,
+        [h("span", { class: "b" }, ed(e, "title", "Job title")), " | ", ed(e, "company", "Company")],
+        [ed(e, "location", "Location"), " | ", ed(e, "dates", "Dates")], "role", e.bullets))],
+    projects: [sec("Projects", () => r.projects.push({ name: "", tech: "", dates: "", bullets: [""] }), "+ project"),
+      r.projects.map((p, i) => entry(r.projects, i,
+        [h("span", { class: "b" }, ed(p, "name", "Project name")), " | ", h("span", { class: "i" }, ed(p, "tech", "Technologies"))],
+        [ed(p, "dates", "Dates")], "project", p.bullets))],
+    education: [sec("Education", () => r.education.push({ degree: "", institution: "", location: "", dates: "", details: "" }), "+ education"),
+      r.education.map((e, i) => entry(r.education, i,
+        [h("span", { class: "b" }, ed(e, "degree", "Degree")), " | ", ed(e, "institution", "Institution"), ", ",
+          ed(e, "location", "Location"), " | ", ed(e, "details", "CGPA / %")],
+        [ed(e, "dates", "Years")], "education entry", null))],
+    certifications: [sec("Certifications"), bulletList(r.certifications)],
+    achievements: [sec("Achievements"), bulletList(r.achievements)],
+  };
+  // Same order as the generated file: projects come first when there's no work experience to show.
+  const projectsFirst = r.projects.length && !r.experience.some(e => e.bullets.some(b => b.trim()));
+  const order = ["summary", "skills", ...(projectsFirst ? ["projects", "experience"] : ["experience", "projects"]),
+    "education", "certifications", "achievements"];
+
+  clear($("#tr-paper"),
+    h("div", { class: "p-name" }, ed(c, "name", "Your name")),
+    h("div", { class: "p-center" }, ed(c, "headline", "Headline (target role)")),
+    h("div", { class: "p-center", style: "font-size:12px" }, ed(c, "location", "City"), " | ", ed(c, "phone", "Phone"), " | ",
+      ed(c, "email", "Email"), c.links.map((_, i) => [" | ", ed(c.links, i, "Link")])),
+    order.map(k => sections[k]));
+
+  if (trFocus) {
+    const [obj, key] = trFocus;
+    const el = trEds.find(x => x._ref[0] === obj && x._ref[1] === key);
+    trFocus = null;
+    if (el) { el.focus(); getSelection().selectAllChildren(el); getSelection().collapseToEnd(); }
+  }
+}
+
+function trChanged(structural = false) {
+  $("#tr-saved").textContent = "Unsaved changes…";
+  if (structural) renderPaper();
+  clearTimeout(trSaveTimer);
+  trSaveTimer = setTimeout(trFlush, 1200);
+}
+
+async function trFlush() {
+  clearTimeout(trSaveTimer); trSaveTimer = null;
+  const d = trDraft;
+  if (!d) return;
+  $("#tr-saved").textContent = "Saving…";
+  try {
+    const saved = await api(`/api/tailored-resume/${encodeURIComponent(d.job_key)}`, { method: "PUT", body: d.resume });
+    // Keep the local resume object (you may have typed meanwhile); take the recomputed checks.
+    Object.assign(d, { coverage: saved.coverage, warnings: saved.warnings, fit: saved.fit, updated_at: saved.updated_at });
+    state.tailored[d.job_key] = d;
+    if (trDraft === d) { if (!trSaveTimer) $("#tr-saved").textContent = "Saved ✓"; renderTailorInfo(); }
+  } catch (e) { $("#tr-saved").textContent = "Not saved"; toast(e.message, true); }
+}
+
+async function trGenerate(fmt, btn) {
+  const d = trDraft;
+  clearTimeout(trSaveTimer); trSaveTimer = null;
+  const label = btn.textContent;
+  btn.disabled = true; btn.textContent = "Generating…";
+  try {
+    const res = await fetch(`/api/tailored-resume/${encodeURIComponent(d.job_key)}/generate?format=${fmt}`, {
+      method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(d.resume) });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error((Array.isArray(err.detail) ? err.detail.map(x => x.msg).join("; ") : err.detail) || `Generate failed (${res.status})`);
+    }
+    const blob = await res.blob();
+    const name = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "")?.[1] || `resume.${fmt}`;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob); a.download = name;
+    document.body.append(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+    const pages = Number(res.headers.get("X-Page-Count")) || 1;
+    toast(pages > 1 ? `Saved ${name}, but it runs to ${pages} pages. Remove a few bullets and generate again.` : `Saved ${name}`, pages > 1);
+    const fresh = await api(`/api/tailored-resume/${encodeURIComponent(d.job_key)}`);
+    Object.assign(d, { files: fresh.files, coverage: fresh.coverage, warnings: fresh.warnings, fit: fresh.fit, updated_at: fresh.updated_at });
+    state.tailored[d.job_key] = d;
+    if (trDraft === d) { $("#tr-saved").textContent = "Saved ✓"; renderTailorInfo(); }
+    refreshTailorButtons();
+  } catch (e) { toast(e.message, true); }
+  finally { btn.disabled = false; btn.textContent = label; }
+}
+
 // ---------------------------------------------------------------- tracker
 async function loadTracker() {
-  const items = await api("/api/tracker");
+  const [items] = await Promise.all([api("/api/tracker"), loadTailoredIndex()]);
   const counts = Object.fromEntries(STATUSES.map(s => [s, items.filter(i => i.status === s).length]));
   const filters = [["active", "Active", items.filter(i => !["rejected", "dismissed"].includes(i.status)).length],
     ...STATUSES.map(s => [s, STATUS_LABEL[s], counts[s]])];
@@ -769,7 +1081,9 @@ function trackerItem(t) {
       h("div", { style: "margin-top:6px" }, notes)),
     h("div", { class: "row", style: "align-items:flex-start" }, select,
       h("button", { class: "btn sm", onclick: () => openKit(j) }, "✉ Cover letter"),
+      tailorButton(j),
       h("button", { class: "btn sm", onclick: () => openCompany(j) }, "🏢 Company"),
+      tailoredFileLinks(t.key),
       h("button", { class: "btn sm", onclick: async () => {
         try { await api(`/api/tracker/${encodeURIComponent(t.key)}`, { method: "DELETE" }); loadTracker(); loadStatus(); }
         catch (e) { toast(e.message, true); } } }, "Remove")));
@@ -816,7 +1130,7 @@ function renderSettings() {
         h("td", {}, src.needs_key ? h("span", { class: "chip " + (src.configured ? "good" : "warn") }, src.configured ? "configured" : "not set") : h("span", { class: "muted small" }, "not needed")),
         h("td", {}, left !== null ? `${left}${q?.reset_at ? ` · resets ${new Date(q.reset_at).toLocaleDateString()}` : ""}` : src.needs_key && src.configured ? h("span", { class: "muted small" }, "checked on next search") : "—"));
     }),
-    h("tr", {}, h("td", {}, "Gemini (AI scoring)"), h("td", { class: "small muted" }, s.gemini_model),
+    h("tr", {}, h("td", {}, "AI (scoring, letters, resumes)"), h("td", { class: "small muted" }, s.ai_providers || "GEMINI_API_KEY / ANTHROPIC_API_KEY"),
       h("td", {}, h("span", { class: "chip " + (s.gemini_configured ? "good" : "warn") }, s.gemini_configured ? "configured" : "not set")), h("td", {}, "—")));
 }
 function renderScheduleState() {
@@ -861,7 +1175,7 @@ async function pollSchedule() {
 // ---------------------------------------------------------------- boot
 (async function boot() {
   try {
-    await Promise.all([loadStatus(), loadProfile()]);
+    await Promise.all([loadStatus(), loadProfile(), loadTailoredIndex()]);
     await loadLatestSearch();
     if (state.status.schedule.running) pollSchedule();
     if (location.hash.length > 1) showTab(location.hash.slice(1));

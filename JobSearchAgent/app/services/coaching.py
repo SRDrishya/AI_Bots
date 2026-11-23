@@ -11,7 +11,7 @@ import re
 from pydantic import BaseModel, Field
 
 from app.models import ApplicationKit, KitTone, ResumeProfile, ScoredJob
-from app.services.gemini import generate_json
+from app.services.ai import generate_json
 from app.services.storage import Storage, now_iso
 
 MAX_CACHED_KITS = 100

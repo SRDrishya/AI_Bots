@@ -19,7 +19,7 @@ from pydantic import BaseModel, Field
 
 from app.config import DEFAULT_GEMINI_MODEL, DEFAULT_PREFERRED_LOCATIONS, MAX_RESUME_BYTES
 from app.models import ResumeProfile
-from app.services.gemini import generate_json
+from app.services.ai import ai_available, generate_json
 from app.services.skills import extract_roles, extract_skills, normalize_skill
 
 log = logging.getLogger(__name__)
@@ -306,6 +306,7 @@ async def analyze_gemini(text: str, api_key: str, model: str) -> _GeminiResume:
         prompt=_GEMINI_PROMPT.format(resume=text[:GEMINI_MAX_INPUT_CHARS]),
         schema=_GeminiResume,
         temperature=0.1,
+        fast=True,
     )
 
 
@@ -353,7 +354,7 @@ async def analyze_text(
 ) -> ResumeProfile:
     """Analyse already-extracted resume text (local heuristics, then Gemini if a key is set)."""
     local = analyze_local(text)
-    if not gemini_api_key:
+    if not ai_available(gemini_api_key):
         return local
     try:
         ai = await analyze_gemini(text, gemini_api_key, gemini_model)

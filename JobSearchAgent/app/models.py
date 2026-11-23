@@ -253,3 +253,102 @@ class ApplicationKitRequest(BaseModel):
     job: ScoredJob
     tone: KitTone = "professional"
     regenerate: bool = False
+
+
+# --------------------------------------------------------------------------- tailored resume
+class ResumeContact(BaseModel):
+    name: str = ""
+    headline: str = Field(default="", description="Short professional title under the name, e.g. 'Python Developer'")
+    email: str = ""
+    phone: str = ""
+    location: str = Field(default="", description="City, State/Country only")
+    links: list[str] = Field(default_factory=list, description="LinkedIn / GitHub / portfolio URLs from the resume")
+
+
+class ResumeSkillGroup(BaseModel):
+    category: str = Field(default="", description="e.g. 'Languages', 'Frameworks', 'Cloud & DevOps'")
+    items: list[str] = Field(default_factory=list)
+
+
+class ResumeRole(BaseModel):
+    title: str = ""
+    company: str = ""
+    location: str = ""
+    dates: str = Field(default="", description="Exactly as in the resume, e.g. 'Jan 2021 – Present'")
+    bullets: list[str] = Field(default_factory=list)
+
+
+class ResumeProject(BaseModel):
+    name: str = ""
+    tech: str = Field(default="", description="Comma-separated technologies used")
+    dates: str = ""
+    bullets: list[str] = Field(default_factory=list)
+
+
+class ResumeEducation(BaseModel):
+    degree: str = ""
+    institution: str = ""
+    location: str = ""
+    dates: str = ""
+    details: str = Field(default="", description="CGPA / percentage / honours, only if in the resume")
+
+
+class ResumeDocument(BaseModel):
+    """A resume as structured content; rendered to PDF/DOCX with one ATS-friendly template."""
+    contact: ResumeContact = Field(default_factory=ResumeContact)
+    summary: str = ""
+    skills: list[ResumeSkillGroup] = Field(default_factory=list)
+    experience: list[ResumeRole] = Field(default_factory=list)
+    projects: list[ResumeProject] = Field(default_factory=list)
+    education: list[ResumeEducation] = Field(default_factory=list)
+    certifications: list[str] = Field(default_factory=list)
+    achievements: list[str] = Field(default_factory=list)
+
+
+class KeywordHit(BaseModel):
+    term: str
+    in_original: bool
+    in_tailored: bool
+
+
+class KeywordCoverage(BaseModel):
+    before: int = 0
+    after: int = 0
+    total: int = 0
+    keywords: list[KeywordHit] = Field(default_factory=list)
+
+
+class PageFit(BaseModel):
+    pages: int = 1
+    font_size: float = 10.5
+    fits: bool = True
+
+
+class TailoredFile(BaseModel):
+    format: Literal["pdf", "docx"]
+    filename: str
+    created_at: str
+
+
+class TailoredResume(BaseModel):
+    """AI-tailored resume draft for one job (editable in the preview; files made on Generate)."""
+    job_key: str
+    job_title: str = ""
+    company: str = ""
+    job_description: str = ""
+    resume: ResumeDocument
+    changes: list[str] = Field(default_factory=list)          # what the AI changed vs. the original
+    gaps: list[str] = Field(default_factory=list)             # JD requirements not shown in the resume
+    jd_keywords: list[str] = Field(default_factory=list)
+    coverage: KeywordCoverage = Field(default_factory=KeywordCoverage)
+    warnings: list[str] = Field(default_factory=list)         # honesty checks: skills/figures not in the original
+    fit: PageFit = Field(default_factory=PageFit)
+    files: list[TailoredFile] = Field(default_factory=list)
+    created_at: str = ""
+    updated_at: str = ""
+
+
+class TailorRequest(BaseModel):
+    job: ScoredJob
+    job_description: str = Field(default="", max_length=20_000)  # pasted full JD; falls back to job.description
+    regenerate: bool = False

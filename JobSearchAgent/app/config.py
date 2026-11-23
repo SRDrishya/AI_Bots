@@ -15,6 +15,11 @@ load_dotenv(dotenv_path=BASE_DIR / ".env", override=False)
 DEFAULT_GEMINI_MODEL = "gemini-3.8-flash"
 DEFAULT_GEMINI_FALLBACKS = "gemini-3.5-flash-lite"
 
+# Anthropic Claude: alternative / fallback AI provider (ANTHROPIC_API_KEY).
+DEFAULT_ANTHROPIC_MODEL = "claude-opus-5-5"        # writing: cover letters, tailored resumes, company research
+DEFAULT_ANTHROPIC_FAST_MODEL = "claude-haiku-5-5"  # high-volume extraction: resume parsing, job scoring
+AI_PROVIDERS = ("gemini", "anthropic")
+
 # India has no daylight saving, so a fixed +05:30 offset is exact (no tz database needed).
 IST = timezone(timedelta(hours=5, minutes=30), "IST")
 
@@ -59,6 +64,10 @@ class EnvSettings:
     gemini_api_key: str
     gemini_model: str
     gemini_fallback_models: list[str]
+    anthropic_api_key: str
+    anthropic_model: str
+    anthropic_fast_model: str
+    ai_provider: str  # main provider; the other one (if its key is set) is the fallback
     adzuna_app_id: str
     adzuna_app_key: str
     rapidapi_key: str
@@ -66,6 +75,14 @@ class EnvSettings:
     host: str
     port: int
     data_dir: Path
+
+
+def _ai_provider() -> str:
+    """AI_PROVIDER=gemini|anthropic (also accepts 'claude'). Default: Gemini first, Claude only as fallback.
+    (With only a Claude key, the router skips Gemini, so Claude is still used.)"""
+    value = os.getenv("AI_PROVIDER", "").strip().lower()
+    value = "anthropic" if value == "claude" else value
+    return value if value in AI_PROVIDERS else "gemini"
 
 
 def get_env_settings() -> EnvSettings:
@@ -78,6 +95,10 @@ def get_env_settings() -> EnvSettings:
             for m in os.getenv("GEMINI_FALLBACK_MODELS", DEFAULT_GEMINI_FALLBACKS).split(",")
             if m.strip()
         ],
+        anthropic_api_key=os.getenv("ANTHROPIC_API_KEY", "").strip(),
+        anthropic_model=os.getenv("ANTHROPIC_MODEL", "").strip() or DEFAULT_ANTHROPIC_MODEL,
+        anthropic_fast_model=os.getenv("ANTHROPIC_FAST_MODEL", "").strip() or DEFAULT_ANTHROPIC_FAST_MODEL,
+        ai_provider=_ai_provider(),
         adzuna_app_id=os.getenv("ADZUNA_APP_ID", "").strip(),
         adzuna_app_key=os.getenv("ADZUNA_APP_KEY", "").strip(),
         rapidapi_key=os.getenv("RAPIDAPI_KEY", "").strip(),

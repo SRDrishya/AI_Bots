@@ -21,6 +21,7 @@ from app.models import (
     CompanyInsightsRequest,
     CompanyInsightsResponse,
     CompanyLink,
+    ResumeDocument,
     ResumeFileInfo,
     ResumeProfile,
     ResumeUploadResult,
@@ -29,6 +30,8 @@ from app.models import (
     SearchResponse,
     SearchSummary,
     StoredSearch,
+    TailoredResume,
+    TailorRequest,
     TrackedJob,
     TrackingStatus,
     TrackJobRequest,
@@ -37,11 +40,13 @@ from app.models import (
 from app.services import export
 from app.services.coaching import KitCache, generate_kit
 from app.services.company import InsightCache, generate_insight, quick_links
+from app.services.ai import NO_KEY_HINT, ai_available, describe as describe_ai
 from app.services.gemini import GeminiError
 from app.services.resume import ResumeParseError, analyze_text, extract_text
 from app.services.scheduler import ScheduleStatus, SearchScheduler
 from app.services.search import run_search
 from app.services.storage import Storage, get_storage, job_key
+from app.services.tailor import TailoredStore, prepare_tailored, refresh, render as render_tailored
 from app.sources import SOURCES
 from app.sources.base import resolve_keys
 from app.sources.quota import QuotaTracker
@@ -62,6 +67,7 @@ class AppStatus(BaseModel):
     has_profile: bool
     gemini_configured: bool
     gemini_model: str
+    ai_providers: str = ""  # e.g. 'Claude (claude-opus-5-5), fallback Gemini (gemini-3.8-flash)'
     sources: list[SourceInfo]
     quota: dict
     schedule: ScheduleStatus
@@ -109,8 +115,9 @@ def create_app(storage: Storage | None = None, start_scheduler: bool = True) -> 
         ]
         return AppStatus(
             has_profile=store.load_profile() is not None,
-            gemini_configured=bool(keys.gemini_api_key),
+            gemini_configured=ai_available(keys.gemini_api_key),
             gemini_model=keys.gemini_model,
+            ai_providers=describe_ai(keys.gemini_api_key, keys.gemini_model),
             sources=sources,
             quota=QuotaTracker(store).snapshot(),
             schedule=scheduler.status(),
@@ -281,8 +288,8 @@ def create_app(storage: Storage | None = None, start_scheduler: bool = True) -> 
     @app.post("/api/application-kit", response_model=ApplicationKit)
     async def application_kit(body: ApplicationKitRequest) -> ApplicationKit:
         keys = resolve_keys(None)
-        if not keys.gemini_api_key:
-            raise HTTPException(status_code=400, detail="Cover letters need a Gemini API key (GEMINI_API_KEY in .env)")
+        if not ai_available(keys.gemini_api_key):
+            raise HTTPException(status_code=400, detail=f"Cover letters need {NO_KEY_HINT}")
         profile = store.load_profile()
         if profile is None:
             raise HTTPException(status_code=400, detail="Upload your resume first")
@@ -299,6 +306,73 @@ def create_app(storage: Storage | None = None, start_scheduler: bool = True) -> 
         return kit
 
     # ------------------------------------------------------------------ company insights
+    # ------------------------------------------------------------------ tailored resume
+    tailored = TailoredStore(store)
+
+    def _tailored_or_404(key: str) -> TailoredResume:
+        draft = tailored.get(key) if TailoredStore.valid_key(key) else None
+        if draft is None:
+            raise HTTPException(status_code=404, detail="No tailored resume for this job yet")
+        return draft
+
+    @app.get("/api/tailored-resumes", response_model=list[TailoredResume])
+    def tailored_list() -> list[TailoredResume]:
+        return tailored.list()
+
+    @app.post("/api/tailored-resume", response_model=TailoredResume)
+    async def tailored_prepare(body: TailorRequest) -> TailoredResume:
+        """AI draft of a resume tailored to one job (cached per job unless regenerate=true)."""
+        keys = resolve_keys(None)
+        if not ai_available(keys.gemini_api_key):
+            raise HTTPException(status_code=400, detail=f"Tailored resumes need {NO_KEY_HINT}")
+        profile, resume_text = store.load_profile(), store.load_resume_text()
+        if profile is None or not resume_text.strip():
+            raise HTTPException(status_code=400, detail="Upload your original resume first")
+        job = body.job if body.job.key else body.job.model_copy(update={"key": job_key(body.job)})
+        if not body.regenerate and (cached := tailored.get(job.key)):
+            return cached
+        description = body.job_description.strip() or job.description
+        try:
+            draft = await prepare_tailored(job, description, profile, resume_text,
+                                           api_key=keys.gemini_api_key, model=keys.gemini_model)
+        except GeminiError as exc:
+            raise HTTPException(status_code=502, detail=str(exc)) from exc
+        if previous := tailored.get(job.key):
+            draft.files = previous.files  # files already generated stay downloadable
+        tailored.put(draft)
+        return draft
+
+    @app.get("/api/tailored-resume/{key}", response_model=TailoredResume)
+    def tailored_get(key: str) -> TailoredResume:
+        return _tailored_or_404(key)
+
+    @app.put("/api/tailored-resume/{key}", response_model=TailoredResume)
+    def tailored_save(key: str, resume: ResumeDocument) -> TailoredResume:
+        """Save edits from the preview; returns updated keyword coverage, warnings and page fit."""
+        draft = refresh(_tailored_or_404(key).model_copy(update={"resume": resume}), store.load_resume_text())
+        tailored.put(draft)
+        return draft
+
+    @app.post("/api/tailored-resume/{key}/generate")
+    def tailored_generate(key: str, resume: ResumeDocument, format: str = "pdf") -> Response:
+        """Save the previewed content, render it as PDF or DOCX, keep a copy and download it."""
+        if format not in ("pdf", "docx"):
+            raise HTTPException(status_code=400, detail="format must be pdf or docx")
+        draft = refresh(_tailored_or_404(key).model_copy(update={"resume": resume}), store.load_resume_text())
+        content, media = render_tailored(draft, format)
+        draft = tailored.save_file(draft, format, content)
+        filename = draft.files[-1].filename
+        headers = {"Content-Disposition": f'attachment; filename="{filename}"',
+                   "X-Page-Count": str(draft.fit.pages), "X-Font-Size": f"{draft.fit.font_size:g}"}
+        return Response(content, media_type=media, headers=headers)
+
+    @app.get("/api/tailored-resume/{key}/files/{filename}")
+    def tailored_file(key: str, filename: str) -> FileResponse:
+        path = tailored.file_path(key, filename) if TailoredStore.valid_key(key) else None
+        if path is None:
+            raise HTTPException(status_code=404, detail="File not found")
+        return FileResponse(path, filename=filename)
+
     @app.get("/api/company/links", response_model=list[CompanyLink])
     def company_links(company: str, role: str = "", location: str = "Chennai") -> list[CompanyLink]:
         if not company.strip():
@@ -311,8 +385,8 @@ def create_app(storage: Storage | None = None, start_scheduler: bool = True) -> 
         response = CompanyInsightsResponse(company=body.company,
                                            links=quick_links(body.company, body.role, body.location))
         keys = resolve_keys(None)
-        if not keys.gemini_api_key:
-            response.ai_error = "Add GEMINI_API_KEY to .env for an AI summary — the links above still work."
+        if not ai_available(keys.gemini_api_key):
+            response.ai_error = f"Add {NO_KEY_HINT} for an AI summary — the links above still work."
             return response
         cache = InsightCache(store)
         if not body.regenerate and (cached := cache.get(body.company, body.role)):

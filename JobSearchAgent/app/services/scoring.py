@@ -24,7 +24,8 @@ from datetime import datetime, timedelta, timezone
 from pydantic import BaseModel, Field
 
 from app.models import JobListing, ResumeProfile, ScoredJob
-from app.services.gemini import GeminiError, generate_json
+from app.services.ai import ai_available, generate_json
+from app.services.gemini import GeminiError
 from app.services.skills import extract_skills, normalize_skill
 from app.sources.base import _GENERIC, _words, clean_query  # shared title tokenisation
 
@@ -294,7 +295,8 @@ async def _rank_batch(batch: list[ScoredJob], profile: ResumeProfile, api_key: s
         locations=", ".join(profile.preferred_locations) or "Chennai, Remote",
         jobs="\n".join(_job_block(k, j) for k, j in keys.items()),
     )
-    result = await generate_json(api_key=api_key, model=model, prompt=prompt, schema=_GeminiBatch, temperature=0.1)
+    result = await generate_json(api_key=api_key, model=model, prompt=prompt, schema=_GeminiBatch, temperature=0.1,
+                                 fast=True)
     return {keys[r.id].id: r for r in result.results if r.id in keys}
 
 
@@ -323,7 +325,7 @@ async def score_jobs(
     top_n: int = GEMINI_TOP_N,
 ) -> ScoringResult:
     local = score_local(jobs, profile)
-    if not gemini_api_key or not gemini_model or not local or top_n <= 0:
+    if not ai_available(gemini_api_key) or not local or top_n <= 0:
         return ScoringResult(local, "local")
 
     head = local[:top_n]

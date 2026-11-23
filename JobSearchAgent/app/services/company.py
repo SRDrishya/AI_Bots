@@ -19,7 +19,8 @@ from pydantic import BaseModel, Field, ValidationError
 
 from app.models import CompanyInsight, CompanyLink
 from app.services.filtering import normalize_company, normalize_title
-from app.services.gemini import GeminiError, generate_grounded, generate_json
+from app.services.ai import generate_grounded, generate_json
+from app.services.gemini import GeminiError
 from app.services.storage import Storage, now_iso
 
 log = logging.getLogger(__name__)

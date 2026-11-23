@@ -8,6 +8,7 @@ A personal job-search assistant that runs on your own computer. Upload your resu
 - runs a **daily search at 08:00 IST** and marks jobs you haven't seen before as **NEW**
 - tracks your applications (saved → applied → interviewing → offer / rejected)
 - exports results to **Excel / CSV** and writes **tailored cover letters**
+- rewrites your saved resume for a specific job (**📄 Tailor resume**): editable preview, then a one-page **PDF / DOCX**
 
 Everything (profile, results, tracker) is stored locally in the `data/` folder.
 
@@ -52,7 +53,8 @@ Then open `.env` and fill in the keys you have. **All are optional:**
 
 | Setting | What it adds | Where to get it | Free tier |
 |---|---|---|---|
-| `GEMINI_API_KEY` | AI resume parsing, AI match scoring, cover letters | https://aistudio.google.com/apikey | yes |
+| `GEMINI_API_KEY` | AI resume parsing, AI match scoring, cover letters, tailored resumes | https://aistudio.google.com/apikey | yes |
+| `ANTHROPIC_API_KEY` | Same AI features using Claude, instead of or as a fallback for Gemini (company research uses Claude's live web search) | https://console.anthropic.com → API keys | no (paid per use) |
 | `RAPIDAPI_KEY` | **JSearch** — Chennai jobs from LinkedIn, Naukri, Shine, company sites | https://rapidapi.com → subscribe to *JSearch* | 200 calls/month |
 | `SERPAPI_KEY` | **Google Jobs** — Chennai jobs | https://serpapi.com | 250 searches/month |
 | `ADZUNA_APP_ID` + `ADZUNA_APP_KEY` | **Adzuna India** | https://developer.adzuna.com | yes |
@@ -70,6 +72,9 @@ Other settings in `.env` (defaults are fine):
 |---|---|---|
 | `GEMINI_MODEL` | `gemini-3.8-flash` | Main Gemini model |
 | `GEMINI_FALLBACK_MODELS` | `gemini-3.5-flash-lite` | Used automatically if the main model is overloaded |
+| `ANTHROPIC_MODEL` | `claude-opus-5-5` | Claude model for writing: cover letters, tailored resumes, company research |
+| `ANTHROPIC_FAST_MODEL` | `claude-haiku-5-5` | Cheaper Claude model for resume parsing and job match scoring |
+| `AI_PROVIDER` | `gemini` | `gemini` or `anthropic`: which AI to try first. If it fails (quota, rate limit, overload) and the other has a key, the app switches automatically |
 | `HOST` / `PORT` | `127.0.0.1` / `8000` | Where the web app is served |
 | `DATA_DIR` | `./data` | Where your profile, results and tracker are saved |
 
@@ -112,6 +117,13 @@ closing it (or pressing `Ctrl+C`) stops the server.
    - **★ Save** / **✓ Applied** — adds the job to the *Tracker* tab
    - **✕ Not interested** — hides the job from all future searches
    - **✉ Cover letter & tips** — tailored cover letter, resume tips and interview talking points
+   - **📄 Tailor resume**: the AI rewrites your saved original resume for this job's description.
+     Paste the full job description if the stored one is short, then click *Prepare*. You get an
+     editable one-page preview: click any text to change it, press Enter to add a bullet, and use ✕ to remove one.
+     The side panel shows JD keyword coverage (original → tailored), gaps the AI did **not** add,
+     and warnings for any skill or figure that isn't in your original resume. Nothing is created until you
+     click **Generate PDF** or **Generate DOCX**. Files are named `Company_Title_Resume.pdf` and are
+     also kept in `data/tailored_resumes/` (linked from the Tracker).
    - **🏢 Company** — reviews, rating, typical pay and interview questions for the employer, plus
      one-click links to its AmbitionBox, Glassdoor, salary and LinkedIn pages. Uses only Gemini
      (no job-portal credits); results are cached per company (30 days, or 7 for AI estimates).
