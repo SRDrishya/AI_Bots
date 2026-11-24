@@ -109,7 +109,7 @@ def create_app(storage: Storage | None = None, start_scheduler: bool = True) -> 
         for task in background:
             task.cancel()
 
-    app = FastAPI(title="Job Search Agent", version="0.1.0", lifespan=lifespan)
+    app = FastAPI(title="JobPilot AI", version="0.1.0", lifespan=lifespan)
     app.state.storage = store
     app.state.scheduler = scheduler
     app.state.email_jobs = email_jobs

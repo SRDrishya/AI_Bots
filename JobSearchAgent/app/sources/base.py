@@ -13,7 +13,7 @@ from app.config import CITY_ALIASES, get_env_settings
 from app.models import ApiKeysInput, ATSBoardConfig, JobListing, ResumeProfile
 from app.sources.quota import QuotaTracker
 
-USER_AGENT = "JobSearchAgent/0.1 (personal job search tool)"
+USER_AGENT = "JobPilotAI/0.1 (personal job search tool)"
 MAX_DESCRIPTION_CHARS = 8000
 
 

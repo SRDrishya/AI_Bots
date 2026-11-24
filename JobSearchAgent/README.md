@@ -1,4 +1,4 @@
-# Job Search Agent
+# JobPilot AI
 
 A personal job-search assistant that runs on your own computer. Upload your resume once and it:
 
@@ -137,7 +137,7 @@ removes its saved refresh token from the operating-system credential store.
 You'll see:
 
 ```
-  Job Search Agent -> http://127.0.0.1:8000
+  JobPilot AI -> http://127.0.0.1:8000
 ```
 
 Open **http://127.0.0.1:8000** in your browser. Leave the terminal open while you use the app —

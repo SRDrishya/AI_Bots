@@ -40,7 +40,7 @@ def client(store, monkeypatch):
 
 def test_index_served(client):
     r = client.get("/")
-    assert r.status_code == 200 and "Job Search Agent" in r.text
+    assert r.status_code == 200 and "JobPilot AI" in r.text
 
 
 def test_status_without_keys(client):

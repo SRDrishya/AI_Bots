@@ -1,1 +1,1 @@
-"""Job Search Agent application package."""
+"""JobPilot AI application package."""
