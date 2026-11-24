@@ -1,0 +1,674 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>InterviewPrep</title>
+<style>
+  :root {
+    --bg: #f6f7f9; --panel: #fff; --text: #1d2330; --muted: #667085; --line: #e4e7ec;
+    --accent: #2f5fd0; --accent-soft: #e8eefc; --good: #137a4b; --good-soft: #e3f4ec;
+    --warn: #a15c07; --warn-soft: #fdf1df; --bad: #b42318; --bad-soft: #fde8e6;
+    --code: #f2f4f7; --radius: 10px; --shadow: 0 1px 2px rgba(16,24,40,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #101318; --panel: #181c23; --text: #e6e9ef; --muted: #98a2b3; --line: #2a303a;
+      --accent: #7da2ff; --accent-soft: #1f2a44; --good: #5fd39b; --good-soft: #15312a;
+      --warn: #f3b75b; --warn-soft: #3a2c14; --bad: #ff8a80; --bad-soft: #3c1d1b; --code: #11151b; --shadow: none;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.55 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  a { color: var(--accent); }
+  button, input, select, textarea { font: inherit; color: inherit; }
+  header { position: sticky; top: 0; z-index: 5; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .bar { max-width: 1180px; margin: 0 auto; padding: 10px 20px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; }
+  .brand { font-weight: 700; font-size: 16px; margin-right: 6px; }
+  .field { display: flex; flex-direction: column; gap: 2px; }
+  .field label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
+  #techSelect { min-width: 290px; }
+  main { max-width: 1180px; margin: 0 auto; padding: 20px; }
+  .grow { flex: 1; }
+  .chip { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px; font-size: 12px;
+          background: var(--bg); border: 1px solid var(--line); color: var(--muted); white-space: nowrap; }
+  .chip.good { background: var(--good-soft); color: var(--good); border-color: transparent; }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+  .chip.accent { background: var(--accent-soft); color: var(--accent); border-color: transparent; }
+  .btn { border: 1px solid var(--line); background: var(--panel); padding: 6px 12px; border-radius: 8px; cursor: pointer;
+         white-space: nowrap; text-decoration: none; color: var(--text); }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.danger { color: var(--bad); }
+  .btn.small { padding: 2px 9px; font-size: 12px; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  input[type=text], input[type=search], select, textarea { border: 1px solid var(--line); background: var(--panel);
+         border-radius: 8px; padding: 6px 10px; }
+  textarea { width: 100%; resize: vertical; }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow);
+           padding: 16px; margin-bottom: 14px; }
+  .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+  .muted { color: var(--muted); }
+  h1 { font-size: 22px; margin: 0; }
+  .stats { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .progress { height: 8px; background: var(--bg); border-radius: 99px; overflow: hidden; margin: 8px 0 4px; }
+  .progress > div { height: 100%; background: var(--accent); transition: width .4s; }
+  .tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); margin: 6px 0 14px; }
+  .tabs button { border: 0; background: none; padding: 8px 14px; cursor: pointer; color: var(--muted);
+                 border-bottom: 2px solid transparent; margin-bottom: -1px; }
+  .tabs button.active { color: var(--accent); border-color: var(--accent); font-weight: 600; }
+  .toolbar { position: sticky; top: 61px; z-index: 3; background: var(--bg); padding: 8px 0; }
+  .q { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); margin-bottom: 8px; }
+  .q.selected { border-color: var(--accent); }
+  .q-head { display: flex; gap: 10px; padding: 10px 14px; align-items: flex-start; }
+  .q-head input { margin-top: 4px; }
+  .q-head .num { color: var(--muted); min-width: 28px; }
+  .q-head .text { flex: 1; font-weight: 500; cursor: pointer; }
+  .q-body { padding: 0 14px 14px 76px; border-top: 1px solid var(--line); }
+  .summary { font-weight: 600; margin: 12px 0 8px; }
+  .md p { margin: 6px 0; }
+  .md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 5px; font-size: 12.5px;
+         font-family: Consolas, "Cascadia Code", Menlo, monospace; }
+  pre { background: var(--code); border: 1px solid var(--line); padding: 10px 12px; border-radius: 8px; overflow-x: auto;
+        font-size: 12.5px; }
+  pre code { background: none; padding: 0; }
+  .sec-title { font-weight: 600; margin: 12px 0 2px; font-size: 13px; }
+  .angle { background: var(--good-soft); color: var(--text); border-left: 3px solid var(--good); padding: 8px 12px;
+           border-radius: 6px; margin-top: 12px; }
+  .sources { font-size: 12px; margin-top: 10px; color: var(--muted); }
+  .related { margin-top: 10px; font-size: 13px; }
+  .related a { cursor: pointer; }
+  .q-actions { margin-top: 12px; }
+  .notes { background: var(--warn-soft); color: var(--warn); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px;
+           font-size: 13px; }
+  .error { background: var(--bad-soft); color: var(--bad); border-radius: 8px; padding: 8px 12px; margin-bottom: 12px; }
+  .score { font-size: 34px; font-weight: 700; }
+  .empty { text-align: center; padding: 50px 20px; color: var(--muted); }
+  dialog { border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); color: var(--text);
+           width: min(820px, 94vw); padding: 20px; }
+  dialog::backdrop { background: rgba(0,0,0,.35); }
+  .review-list { max-height: 45vh; overflow-y: auto; border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px;
+                 margin: 10px 0; }
+  .review-list h4 { margin: 10px 0 4px; color: var(--accent); }
+  .review-list ol { margin: 0; padding-left: 22px; }
+  .formats { display: flex; gap: 10px; margin: 8px 0; }
+  .formats label { border: 1px solid var(--line); border-radius: 8px; padding: 8px 14px; cursor: pointer; }
+  .formats label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+  #toast { position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%); background: var(--text); color: var(--panel);
+           padding: 8px 16px; border-radius: 8px; opacity: 0; transition: opacity .2s; pointer-events: none; z-index: 20; }
+  #toast.show { opacity: 1; }
+  .spin { display: inline-block; width: 10px; height: 10px; border: 2px solid var(--accent); border-right-color: transparent;
+          border-radius: 50%; animation: spin .8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <span class="brand">🎯 InterviewPrep</span>
+    <div class="field"><label for="techSelect">Technology</label><select id="techSelect"></select></div>
+    <div class="field"><label for="expSelect">Experience</label><select id="expSelect"></select></div>
+    <button class="btn" id="addTechBtn" title="Add a technology that isn't in the list" style="align-self:flex-end">+ Add</button>
+    <span class="grow"></span>
+    <span id="aiStatus" class="chip"></span>
+    <button class="btn" id="settingsBtn">⚙ Settings</button>
+  </div>
+</header>
+
+<main id="main"></main>
+
+<dialog id="exportDialog">
+  <h2 style="margin-top:0">Review &amp; export</h2>
+  <p class="muted" id="exportInfo"></p>
+  <div class="review-list" id="exportList"></div>
+  <div class="sec-title">Format</div>
+  <div class="formats">
+    <label><input type="radio" name="fmt" value="pdf" checked> PDF</label>
+    <label><input type="radio" name="fmt" value="docx"> Word (DOCX)</label>
+    <label><input type="radio" name="fmt" value="html"> Web page (HTML)</label>
+  </div>
+  <div class="row">
+    <label><input type="checkbox" id="exSources" checked> Include source links</label>
+    <label><input type="checkbox" id="exAngle" checked> Include “Your angle” notes</label>
+  </div>
+  <div class="row" style="margin-top:14px;justify-content:flex-end">
+    <button class="btn" id="exportCancel">Cancel</button>
+    <button class="btn primary" id="exportGo">Confirm &amp; generate</button>
+  </div>
+</dialog>
+
+<dialog id="addDialog">
+  <h2 style="margin-top:0">Add a technology</h2>
+  <form id="addForm">
+    <div class="row">
+      <input type="text" id="addName" placeholder="e.g. Docker, Kafka, Redis" style="flex:1" maxlength="80" required>
+      <select id="addKind">
+        <option value="tech">Technology</option><option value="design">Design / architecture</option>
+        <option value="ai">AI</option><option value="behavioral">Behavioral</option>
+      </select>
+    </div>
+    <div class="row" style="margin-top:14px;justify-content:flex-end">
+      <button class="btn" type="button" id="addCancel">Cancel</button>
+      <button class="btn primary" type="submit">Add</button>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="settings">
+  <h2 style="margin-top:0">Settings</h2>
+  <p class="muted" id="settingsInfo"></p>
+  <label class="sec-title" for="resumeText">Resume text</label>
+  <p class="muted" style="margin:2px 0 6px">Used for behavioral STAR answers and the “Your angle” notes.
+    Imported from JobSearchAgent on first start; paste a new version any time.</p>
+  <textarea id="resumeText" rows="12"></textarea>
+  <label class="sec-title" for="companiesText">Target companies</label>
+  <p class="muted" style="margin:2px 0 6px">Interview reports from candidates at these companies are searched first
+    (one per line or comma-separated).</p>
+  <textarea id="companiesText" rows="4"></textarea>
+  <div class="row" style="margin-top:12px;justify-content:flex-end">
+    <button class="btn" id="settingsClose">Close</button>
+    <button class="btn primary" id="resumeSave">Save</button>
+  </div>
+</dialog>
+<div id="toast"></div>
+
+<script>
+const state = { techs: [], slug: null, exp: null, bank: null, progress: {}, job: null, tab: "browse",
+                filters: { search: "", category: "", level: "", status: "" }, open: new Set(), selected: new Set(),
+                sort: "likely", reportedOnly: false, topN: false,
+                semantic: null, related: {},
+                practice: { order: [], index: 0, shuffle: true, feedback: null, reveal: false, answer: "", busy: false },
+                status: null, poll: null };
+const LEVELS = { beginner: "Beginner", intermediate: "Intermediate", advanced: "Advanced" };
+const LEVEL_CLASS = { beginner: "good", intermediate: "accent", advanced: "warn" };
+const STATUS = { new: "New", known: "Known", review: "Review" };
+const STATUS_CLASS = { new: "", known: "good", review: "bad" };
+const $ = (id) => document.getElementById(id);
+
+// ---------- helpers ----------
+function esc(s) { return String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c])); }
+function inline(s) {
+  return esc(s).replace(/`([^`]+)`/g, "<code>$1</code>").replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/\[([^\]]+)\]\((https?:[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+}
+function md(text) {  // small Markdown renderer: paragraphs, lists, code fences, bold, inline code, links
+  const out = []; let list = null, para = [], code = null;
+  const flushPara = () => { if (para.length) { out.push(`<p>${inline(para.join(" "))}</p>`); para = []; } };
+  const flushList = () => { if (list) { out.push(`<${list.tag}>${list.items.map(i => `<li>${inline(i)}</li>`).join("")}</${list.tag}>`); list = null; } };
+  for (const line of String(text || "").split("\n")) {
+    if (line.trim().startsWith("```")) {
+      if (code) { out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`); code = null; }
+      else { flushPara(); flushList(); code = []; }
+      continue;
+    }
+    if (code) { code.push(line); continue; }
+    const ul = line.match(/^\s*[-*+]\s+(.*)/), ol = line.match(/^\s*\d+[.)]\s+(.*)/);
+    if (ul || ol) {
+      flushPara(); const tag = ul ? "ul" : "ol";
+      if (!list || list.tag !== tag) { flushList(); list = { tag, items: [] }; }
+      list.items.push((ul || ol)[1]); continue;
+    }
+    if (!line.trim()) { flushPara(); flushList(); continue; }
+    if (/^#+\s/.test(line)) { flushPara(); flushList(); out.push(`<p><b>${inline(line.replace(/^#+\s*/, ""))}</b></p>`); continue; }
+    flushList(); para.push(line.trim());
+  }
+  if (code) out.push(`<pre><code>${esc(code.join("\n"))}</code></pre>`);
+  flushPara(); flushList();
+  return `<div class="md">${out.join("")}</div>`;
+}
+function toast(msg) { const t = $("toast"); t.textContent = msg; t.classList.add("show"); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("show"), 3500); }
+async function api(path, opts = {}) {
+  const res = await fetch(path, { headers: { "Content-Type": "application/json" }, ...opts });
+  if (!res.ok) {
+    let detail = res.statusText;
+    try { const j = await res.json(); detail = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail); } catch {}
+    throw new Error(detail);
+  }
+  return res.json();
+}
+const bankUrl = (path = "") => `/api/banks/${state.slug}${path}${path.includes("?") ? "&" : "?"}exp=${state.exp}`;
+const currentTech = () => state.techs.find(t => t.slug === state.slug);
+const expLabel = () => (state.status.experiences.find(e => e.key === state.exp) || {}).label || state.exp;
+const statusOf = (q) => (state.progress[q.id] || {}).status || "new";
+const byId = (id) => state.bank && state.bank.questions.find(q => q.id === id);
+
+// ---------- dropdowns ----------
+async function loadTechs() {
+  state.techs = await api(`/api/technologies?exp=${state.exp}`);
+  const groups = {};
+  for (const t of state.techs) (groups[t.group] = groups[t.group] || []).push(t);
+  $("techSelect").innerHTML = `<option value="">— Choose a technology —</option>` +
+    Object.entries(groups).map(([g, items]) => `<optgroup label="${esc(g)}">${items.map(t =>
+      `<option value="${t.slug}" ${t.slug === state.slug ? "selected" : ""}>${esc(t.name)}${t.count ? ` (${t.count})` : ""}${t.job.state === "running" ? " ⏳" : ""}</option>`).join("")}</optgroup>`).join("");
+}
+$("techSelect").addEventListener("change", (e) => selectBank(e.target.value, state.exp));
+$("expSelect").addEventListener("change", async (e) => { state.exp = e.target.value; await loadTechs(); selectBank(state.slug, state.exp); });
+
+function saveHash() { location.hash = state.slug ? `${state.slug}/${state.exp}` : ""; }
+
+async function selectBank(slug, exp) {
+  state.slug = slug || null; state.exp = exp;
+  state.open.clear(); state.selected.clear(); state.semantic = null; state.related = {};
+  state.filters = { search: "", category: "", level: "", status: "" };
+  state.reportedOnly = false; state.topN = false;
+  state.practice = { ...state.practice, order: [], index: 0, feedback: null, reveal: false, answer: "" };
+  saveHash();
+  if (!state.slug) { state.bank = null; render(); return; }
+  await loadBank();
+}
+async function loadBank() {
+  const slug = state.slug, exp = state.exp;
+  const data = await api(bankUrl());
+  if (slug !== state.slug || exp !== state.exp) return;
+  state.bank = data.bank; state.progress = data.progress; state.job = data.job;
+  render();
+  watchJob();
+}
+function watchJob() {
+  clearTimeout(state.poll);
+  if (!state.job || state.job.state !== "running") return;
+  state.poll = setTimeout(async () => {
+    await loadBank().catch(() => {});
+    if (state.job.state !== "running") {
+      toast(state.job.state === "done" ? `Finished: ${state.job.message}` : `Build failed: ${state.job.message}`);
+      loadTechs();
+    }
+  }, 2500);
+}
+async function startBuild(mode) {
+  try {
+    state.job = await api(bankUrl(`/build?mode=${mode}`), { method: "POST" });
+    await loadTechs(); render(); watchJob();
+  } catch (err) { toast(err.message); }
+}
+
+// ---------- filtering ----------
+function filtered() {
+  if (!state.bank) return [];
+  const f = state.filters, term = f.search.trim().toLowerCase();
+  let list = state.bank.questions;
+  if (state.semantic) {  // ranked by meaning
+    list = state.semantic.ids.map(byId).filter(Boolean);
+  } else if (term) {
+    list = list.filter(q => q.question.toLowerCase().includes(term));
+  }
+  list = list.filter(q => (!f.category || q.category === f.category) && (!f.level || q.level === f.level) &&
+    (!f.status || statusOf(q) === f.status) && (!state.reportedOnly || q.reported));
+  if (!state.semantic && (state.sort === "likely" || state.topN)) {
+    list = [...list].sort((a, b) => (b.likelihood || 0) - (a.likelihood || 0));
+  }
+  return state.topN ? list.slice(0, 30) : list;
+}
+const siteCount = (q) => new Set(q.sources.map(s => (s.url.split("/")[2] || "").replace(/^(www|old)\./, ""))).size;
+async function semanticSearch() {
+  const q = state.filters.search.trim();
+  if (q.length < 2) { toast("Type at least 2 characters"); return; }
+  try {
+    const r = await api(bankUrl(`/search?q=${encodeURIComponent(q)}`));
+    state.semantic = { query: q, ids: r.results.map(x => x.id), mode: r.mode };
+    if (r.mode !== "semantic") toast("Semantic search unavailable — showing word matches");
+  } catch (err) { toast(err.message); }
+  render();
+}
+
+// ---------- rendering ----------
+function render() {
+  const main = $("main"), tech = currentTech();
+  if (!tech) {
+    main.innerHTML = `<div class="empty"><h2>Choose a technology and your experience</h2>
+      <p>Questions are collected only from real web pages: interview-prep sites, blogs and posts where candidates share
+      what they were asked. The AI copies the questions, checks each one is really on the page, and writes answers
+      pitched at the experience level you pick.</p></div>`;
+    return;
+  }
+  const bank = state.bank, job = state.job || {}, running = job.state === "running";
+  const qs = bank ? bank.questions : [];
+  const answered = qs.filter(q => q.answer).length;
+  const known = qs.filter(q => statusOf(q) === "known").length, review = qs.filter(q => statusOf(q) === "review").length;
+  const pct = job.total ? Math.round(100 * job.done / job.total) : 5;
+  const dis = running ? "disabled" : "";
+
+  main.innerHTML = `
+    <div class="panel">
+      <div class="row" style="align-items:flex-start">
+        <div class="grow">
+          <h1>${esc(tech.name)} <span class="muted" style="font-size:15px;font-weight:400">· ${esc(expLabel())}</span></h1>
+          ${tech.focus ? `<div class="muted">${esc(tech.focus)}</div>` : ""}
+          <div class="stats">
+            <span class="chip accent">${qs.length} questions</span>
+            <span class="chip">${answered} answered</span>
+            <span class="chip accent" title="Questions real candidates reported being asked">🎤 ${qs.filter(q => q.reported).length} from real interviews</span>
+            <span class="chip good">${known} known</span>
+            <span class="chip bad">${review} to review</span>
+            ${bank && bank.updated_at ? `<span class="chip">updated ${new Date(bank.updated_at).toLocaleString()}</span>` : ""}
+          </div>
+        </div>
+        <div class="row" style="justify-content:flex-end">
+          ${!bank ? `<button class="btn primary" data-act="build" ${dis}>🔎 Collect questions from the web</button>` : `
+            <button class="btn" data-act="more" ${dis}>➕ Find more questions</button>
+            ${answered < qs.length ? `<button class="btn" data-act="answers" ${dis}>✍ Fill missing answers</button>` : ""}
+            <button class="btn" data-act="rebuild" ${dis}>↻ Start over</button>
+            <button class="btn danger" data-act="deleteBank" ${dis}>Delete questions</button>`}
+          ${!tech.builtin ? `<button class="btn danger" data-act="removeTech" ${dis}>Remove technology</button>` : ""}
+        </div>
+      </div>
+      ${running ? `<div style="margin-top:12px"><b>${esc(job.stage)}</b> <span class="muted">${job.total ? `${job.done} / ${job.total}` : ""}
+          ${job.message ? " · " + esc(job.message) : ""}</span>
+          <div class="progress"><div style="width:${pct}%"></div></div>
+          <div class="muted" style="font-size:12px">This searches the web, reads each page and writes answers, so it takes several minutes. Questions appear here as they are found.</div></div>` : ""}
+      ${job.state === "error" ? `<div class="error" style="margin:12px 0 0">Last run failed: ${esc(job.message)}</div>` : ""}
+    </div>
+    ${bank && bank.warnings.length ? `<details class="notes"><summary>Notes from the last run (${bank.warnings.length})</summary>
+        <ul>${bank.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></details>` : ""}
+    ${bank ? renderBankArea() : (running ? "" : `<div class="empty">No questions yet for <b>${esc(tech.name)}</b> at <b>${esc(expLabel())}</b>.
+        Click <b>Collect questions from the web</b> (target: about ${state.status.questions_per_tech}).</div>`)}`;
+}
+
+function renderBankArea() {
+  const f = state.filters, cats = state.bank.categories.filter(c => state.bank.questions.some(q => q.category === c));
+  const opt = (v, label, cur) => `<option value="${esc(v)}" ${v === cur ? "selected" : ""}>${esc(label)}</option>`;
+  return `<div class="tabs">
+      <button data-tab="browse" class="${state.tab === "browse" ? "active" : ""}">📚 Browse &amp; review</button>
+      <button data-tab="practice" class="${state.tab === "practice" ? "active" : ""}">🎤 Practice</button>
+    </div>
+    <div class="row" style="margin-bottom:6px">
+      <input type="search" id="fSearch" placeholder="Search questions… (Enter = search by meaning)" value="${esc(f.search)}" style="flex:1;min-width:220px">
+      <button class="btn" id="semanticBtn" title="Find questions by meaning, not just matching words">🧠 Search by meaning</button>
+      <select id="fCategory">${opt("", "All categories", f.category)}${cats.map(c => opt(c, c, f.category)).join("")}</select>
+      <select id="fLevel">${opt("", "All levels", f.level)}${Object.entries(LEVELS).map(([k, v]) => opt(k, v, f.level)).join("")}</select>
+      <select id="fStatus">${opt("", "Any status", f.status)}${Object.entries(STATUS).map(([k, v]) => opt(k, v, f.status)).join("")}</select>
+    </div>
+    <div class="row" style="margin-bottom:6px">
+      <select id="fSort" title="Order of the questions">${opt("likely", "Sort: most likely to be asked", state.sort)}${opt("bank", "Sort: as collected", state.sort)}</select>
+      <label title="Only questions candidates reported being asked in real interviews"><input type="checkbox" id="fReported" ${state.reportedOnly ? "checked" : ""}> 🎤 Only from real interviews</label>
+      <button class="btn small ${state.topN ? "primary" : ""}" id="topN" title="The 30 questions most likely to come up — for last-minute revision">🎯 Top 30 must-know</button>
+    </div>
+    ${state.semantic ? `<div class="muted" style="margin-bottom:6px">Showing ${state.semantic.ids.length} questions closest in meaning to
+      “${esc(state.semantic.query)}” <a href="#" id="clearSemantic">clear</a></div>` : ""}
+    <div id="tabBody">${state.tab === "browse" ? renderBrowse() : renderPractice()}</div>`;
+}
+
+function answerHtml(q) {
+  const a = q.answer;
+  if (!a) return `<p class="muted">No answer yet — use “Fill missing answers” or regenerate this one.</p>`;
+  const list = (title, items) => items && items.length ? `<div class="sec-title">${title}</div><ul>${items.map(i => `<li>${inline(i)}</li>`).join("")}</ul>` : "";
+  return `${a.summary ? `<div class="summary">${inline(a.summary)}</div>` : ""}
+    ${md(a.explanation)}
+    ${a.code_example ? `<div class="sec-title">Example${a.code_language ? ` (${esc(a.code_language)})` : ""}</div><pre><code>${esc(a.code_example)}</code></pre>` : ""}
+    ${list("Key points to mention", a.key_points)}
+    ${list("Common pitfalls", a.pitfalls)}
+    ${list("Likely follow-up questions", a.follow_ups)}
+    ${a.your_angle ? `<div class="angle"><b>Your angle:</b> ${inline(a.your_angle)}</div>` : ""}`;
+}
+function sourcesHtml(q) {
+  if (!q.sources.length) return "";
+  return `<div class="sources">Asked on: ${q.sources.map(s => `<a href="${esc(s.url)}" target="_blank" rel="noopener">${esc(s.title)}</a>`).join(" · ")}</div>`;
+}
+function relatedHtml(q) {
+  const r = state.related[q.id];
+  if (!r) return `<div class="related"><a data-related="${q.id}">🔗 Show related questions</a></div>`;
+  if (r.loading) return `<div class="related"><span class="spin"></span> Finding related questions…</div>`;
+  if (!r.results.length) return `<div class="related muted">${esc(r.note || "No closely related questions in this bank.")}</div>`;
+  return `<div class="related"><b>Related questions</b><ul>${r.results.map(x => byId(x.id)).filter(Boolean)
+    .map(x => `<li><a data-goto="${x.id}">${esc(x.question)}</a></li>`).join("")}</ul></div>`;
+}
+function chips(q) {
+  const st = statusOf(q);
+  const sites = siteCount(q);
+  return `${q.reported ? `<span class="chip good" title="A candidate reported being asked this in a real interview">🎤 real interview${q.companies.length ? ": " + esc(q.companies.slice(0, 3).join(", ")) : ""}</span>`
+      : q.companies.length ? `<span class="chip">🏢 ${esc(q.companies.slice(0, 3).join(", "))}</span>` : ""}
+    ${sites > 1 ? `<span class="chip warn" title="Found on ${sites} different sites">🔥 ${sites} sites</span>` : ""}
+    <span class="chip ${LEVEL_CLASS[q.level]}">${LEVELS[q.level]}</span>
+    <span class="chip">${esc(q.category)}</span>
+    ${q.fits_experience === false ? '<span class="chip" title="A real interview question, but usually asked at a lower experience level">basic for this level</span>' : ""}
+    ${st !== "new" ? `<span class="chip ${STATUS_CLASS[st]}">${STATUS[st]}</span>` : ""}
+    ${q.answer ? "" : '<span class="chip warn">no answer</span>'}`;
+}
+
+function renderBrowse() {
+  const qs = filtered();
+  const allSelected = qs.length && qs.every(q => state.selected.has(q.id));
+  const toolbar = `<div class="row toolbar">
+      <label><input type="checkbox" id="selectAll" ${allSelected ? "checked" : ""}> Select all shown (${qs.length})</label>
+      <span class="chip accent">${state.selected.size} selected</span>
+      ${state.selected.size ? `<a href="#" id="clearSel">clear</a>` : ""}
+      <span class="grow"></span>
+      <button class="btn small" id="expandAll">Expand all</button>
+      <button class="btn small" id="collapseAll">Collapse all</button>
+      <button class="btn primary" id="reviewExport" ${state.selected.size ? "" : "disabled"}>📄 Review &amp; export…</button>
+    </div>`;
+  if (!qs.length) return toolbar + `<div class="empty">No questions match these filters.</div>`;
+  return toolbar + qs.map((q, i) => {
+    const open = state.open.has(q.id), sel = state.selected.has(q.id);
+    return `<div class="q ${sel ? "selected" : ""}" id="q-${q.id}">
+      <div class="q-head"><input type="checkbox" data-select="${q.id}" ${sel ? "checked" : ""} title="Include in export">
+        <span class="num">${i + 1}.</span>
+        <span class="text" data-toggle="${q.id}">${esc(q.question)}</span><span class="row">${chips(q)}</span></div>
+      ${open ? `<div class="q-body">${answerHtml(q)}${sourcesHtml(q)}${relatedHtml(q)}
+        <div class="row q-actions">
+          <button class="btn small" data-status="known" data-id="${q.id}">✓ I know this</button>
+          <button class="btn small" data-status="review" data-id="${q.id}">↺ Review later</button>
+          ${statusOf(q) !== "new" ? `<button class="btn small" data-status="new" data-id="${q.id}">Reset</button>` : ""}
+          <span class="grow"></span>
+          <button class="btn small" data-regen="${q.id}">Regenerate answer</button>
+          <button class="btn small danger" data-delq="${q.id}">Delete</button>
+        </div></div>` : ""}
+    </div>`;
+  }).join("");
+}
+
+// ---------- practice ----------
+function practiceOrder() {
+  const ids = filtered().map(q => q.id), p = state.practice;
+  const same = p.order.length === ids.length && p.order.every(id => ids.includes(id));
+  if (!same) {
+    p.order = p.shuffle ? ids.sort(() => Math.random() - 0.5) : ids;
+    p.index = 0; p.feedback = null; p.reveal = false; p.answer = "";
+  }
+  return p.order;
+}
+function renderPractice() {
+  const order = practiceOrder(), p = state.practice;
+  if (!order.length) return `<div class="empty">No questions match these filters. Tip: filter by status “Review” to drill weak spots.</div>`;
+  const q = byId(order[p.index]);
+  if (!q) return "";
+  const fb = p.feedback;
+  return `<div class="panel">
+      <div class="row muted" style="margin-bottom:8px">Question ${p.index + 1} of ${order.length} · scored as ${esc(expLabel())}
+        <span class="grow"></span><label><input type="checkbox" id="pShuffle" ${p.shuffle ? "checked" : ""}> Shuffle</label></div>
+      <div class="row" style="margin-bottom:8px">${chips(q)}</div>
+      <h2 style="margin:4px 0 12px;font-size:18px">${esc(q.question)}</h2>
+      <textarea id="pAnswer" rows="8" placeholder="Answer as you would in the interview, then click “Check my answer”.">${esc(p.answer)}</textarea>
+      <div class="row" style="margin-top:10px">
+        <button class="btn primary" id="pCheck" ${p.busy ? "disabled" : ""}>${p.busy ? '<span class="spin"></span> Checking…' : "Check my answer"}</button>
+        <button class="btn" id="pReveal">${p.reveal ? "Hide" : "Show"} model answer</button>
+        <span class="grow"></span>
+        <button class="btn small" data-status="known" data-id="${q.id}">✓ Known</button>
+        <button class="btn small" data-status="review" data-id="${q.id}">↺ Review</button>
+        <button class="btn" id="pPrev" ${p.index === 0 ? "disabled" : ""}>← Prev</button>
+        <button class="btn" id="pNext">Next →</button>
+      </div>
+    </div>
+    ${fb ? `<div class="panel">
+        <div class="row"><span class="score" style="color:var(--${fb.score >= 8 ? "good" : fb.score >= 5 ? "warn" : "bad"})">${fb.score}/10</span>
+          <span style="margin-left:10px">${inline(fb.verdict)}</span></div>
+        ${fb.strengths.length ? `<div class="sec-title">What was good</div><ul>${fb.strengths.map(s => `<li>${inline(s)}</li>`).join("")}</ul>` : ""}
+        ${fb.gaps.length ? `<div class="sec-title">What was missing</div><ul>${fb.gaps.map(s => `<li>${inline(s)}</li>`).join("")}</ul>` : ""}
+        ${fb.improved_answer ? `<div class="sec-title">Your answer, improved</div>${md(fb.improved_answer)}` : ""}
+      </div>` : ""}
+    ${p.reveal ? `<div class="panel">${answerHtml(q)}${sourcesHtml(q)}</div>` : ""}`;
+}
+function movePractice(step) {
+  const p = state.practice;
+  p.index = Math.max(0, Math.min(p.order.length - 1, p.index + step));
+  p.feedback = null; p.reveal = false; p.answer = "";
+  render();
+}
+async function checkAnswer() {
+  const p = state.practice, answer = $("pAnswer").value.trim();
+  if (!answer) { toast("Type your answer first"); return; }
+  p.answer = answer; p.busy = true; render();
+  try {
+    const r = await api("/api/practice/evaluate", { method: "POST",
+      body: JSON.stringify({ slug: state.slug, experience: state.exp, question_id: p.order[p.index], answer }) });
+    p.feedback = r.evaluation; state.progress[p.order[p.index]] = r.progress;
+  } catch (err) { toast(err.message); }
+  p.busy = false; render();
+}
+
+// ---------- review & export ----------
+function openExport() {
+  const chosen = state.bank.questions.filter(q => state.selected.has(q.id));
+  const groups = {};
+  for (const q of chosen) (groups[q.category] = groups[q.category] || []).push(q);
+  const missing = chosen.filter(q => !q.answer).length;
+  $("exportInfo").innerHTML = `${chosen.length} question(s) from <b>${esc(currentTech().name)}</b>, answers for <b>${esc(expLabel())}</b>.
+    Check the list, then pick a format.${missing ? ` <span style="color:var(--warn)">${missing} selected question(s) have no answer yet.</span>` : ""}`;
+  $("exportList").innerHTML = Object.entries(groups).map(([c, items]) =>
+    `<h4>${esc(c)} (${items.length})</h4><ol>${items.map(q => `<li>${esc(q.question)} <span class="muted">· ${LEVELS[q.level]}</span></li>`).join("")}</ol>`).join("");
+  $("exportDialog").showModal();
+}
+$("exportCancel").addEventListener("click", () => $("exportDialog").close());
+$("exportGo").addEventListener("click", async () => {
+  const btn = $("exportGo"), format = document.querySelector("input[name=fmt]:checked").value;
+  btn.disabled = true; btn.innerHTML = '<span class="spin"></span> Generating…';
+  try {
+    const res = await fetch(bankUrl("/export"), { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ format, question_ids: [...state.selected], include_sources: $("exSources").checked, include_angle: $("exAngle").checked }) });
+    if (!res.ok) throw new Error((await res.json().catch(() => ({}))).detail || res.statusText);
+    const blob = await res.blob(), url = URL.createObjectURL(blob), a = document.createElement("a");
+    a.href = url; a.download = `${state.slug}-${state.exp}-interview-questions.${format}`;
+    document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 5000);
+    $("exportDialog").close(); toast(`${format.toUpperCase()} downloaded`);
+  } catch (err) { toast(err.message); }
+  btn.disabled = false; btn.textContent = "Confirm & generate";
+});
+
+// ---------- events in the main area ----------
+$("main").addEventListener("click", async (e) => {
+  const t = e.target.closest("button, [data-toggle], a, input[type=checkbox]"); if (!t) return;
+  if (t.dataset.toggle) { const id = t.dataset.toggle; state.open.has(id) ? state.open.delete(id) : state.open.add(id); render(); return; }
+  if (t.dataset.select) { t.checked ? state.selected.add(t.dataset.select) : state.selected.delete(t.dataset.select); render(); return; }
+  if (t.id === "selectAll") { for (const q of filtered()) t.checked ? state.selected.add(q.id) : state.selected.delete(q.id); render(); return; }
+  if (t.id === "clearSel") { e.preventDefault(); state.selected.clear(); render(); return; }
+  if (t.id === "clearSemantic") { e.preventDefault(); state.semantic = null; render(); return; }
+  if (t.id === "expandAll") { for (const q of filtered()) state.open.add(q.id); render(); return; }
+  if (t.id === "collapseAll") { state.open.clear(); render(); return; }
+  if (t.id === "reviewExport") return openExport();
+  if (t.id === "semanticBtn") return semanticSearch();
+  if (t.id === "topN") { state.topN = !state.topN; render(); return; }
+  if (t.dataset.tab) { state.tab = t.dataset.tab; render(); return; }
+  if (t.dataset.related) {
+    const id = t.dataset.related; state.related[id] = { loading: true }; render();
+    try { state.related[id] = await api(bankUrl(`/questions/${id}/related`)); } catch (err) { state.related[id] = { results: [], note: err.message }; }
+    render(); return;
+  }
+  if (t.dataset.goto) {
+    const id = t.dataset.goto; state.semantic = null; state.filters = { search: "", category: "", level: "", status: "" };
+    state.open.add(id); render(); const el = $(`q-${id}`); if (el) el.scrollIntoView({ behavior: "smooth", block: "center" }); return;
+  }
+  if (t.dataset.status) {
+    try { state.progress[t.dataset.id] = await api(`/api/progress/${t.dataset.id}`, { method: "PUT", body: JSON.stringify({ status: t.dataset.status }) }); }
+    catch (err) { toast(err.message); }
+    if (state.tab === "practice") state.practice.answer = ($("pAnswer") || {}).value || "";
+    render(); return;
+  }
+  if (t.dataset.regen) {
+    t.disabled = true; t.innerHTML = '<span class="spin"></span> Writing…';
+    try {
+      const q = await api(bankUrl(`/questions/${t.dataset.regen}/answer`), { method: "POST" });
+      const i = state.bank.questions.findIndex(x => x.id === q.id); state.bank.questions[i] = q; toast("Answer updated");
+    } catch (err) { toast(err.message); }
+    render(); return;
+  }
+  if (t.dataset.delq) {
+    if (!confirm("Delete this question?")) return;
+    try { await api(bankUrl(`/questions/${t.dataset.delq}`), { method: "DELETE" }); state.selected.delete(t.dataset.delq); await loadBank(); loadTechs(); }
+    catch (err) { toast(err.message); }
+    return;
+  }
+  const act = t.dataset.act;
+  if (act === "build" || act === "more" || act === "answers") return startBuild(act);
+  if (act === "rebuild") { if (confirm("Start over? Current questions for this experience level are replaced.")) startBuild("build"); return; }
+  if (act === "deleteBank") {
+    if (!confirm(`Delete all ${currentTech().name} questions for ${expLabel()}?`)) return;
+    try { await api(bankUrl(), { method: "DELETE" }); state.selected.clear(); await loadBank(); loadTechs(); } catch (err) { toast(err.message); }
+    return;
+  }
+  if (act === "removeTech") {
+    if (!confirm("Remove this technology and all its questions?")) return;
+    try { await api(`/api/technologies/${state.slug}`, { method: "DELETE" }); await loadTechs(); selectBank(null, state.exp); }
+    catch (err) { toast(err.message); }
+    return;
+  }
+  if (t.id === "pCheck") return checkAnswer();
+  if (t.id === "pReveal") { state.practice.answer = $("pAnswer").value; state.practice.reveal = !state.practice.reveal; render(); return; }
+  if (t.id === "pNext") return movePractice(1);
+  if (t.id === "pPrev") return movePractice(-1);
+});
+$("main").addEventListener("input", (e) => {
+  if (e.target.id === "fSearch") {
+    state.filters.search = e.target.value; state.semantic = null;
+    const pos = e.target.selectionStart; render();
+    const el = $("fSearch"); el.focus(); el.setSelectionRange(pos, pos);
+  }
+  if (e.target.id === "pAnswer") state.practice.answer = e.target.value;
+});
+$("main").addEventListener("keydown", (e) => { if (e.target.id === "fSearch" && e.key === "Enter") semanticSearch(); });
+$("main").addEventListener("change", (e) => {
+  const map = { fCategory: "category", fLevel: "level", fStatus: "status" };
+  if (map[e.target.id]) { state.filters[map[e.target.id]] = e.target.value; render(); }
+  if (e.target.id === "fSort") { state.sort = e.target.value; render(); }
+  if (e.target.id === "fReported") { state.reportedOnly = e.target.checked; render(); }
+  if (e.target.id === "pShuffle") { state.practice.shuffle = e.target.checked; state.practice.order = []; render(); }
+});
+
+// ---------- add technology & settings ----------
+$("addTechBtn").addEventListener("click", () => { $("addName").value = ""; $("addDialog").showModal(); });
+$("addCancel").addEventListener("click", () => $("addDialog").close());
+$("addForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  try {
+    const tech = await api("/api/technologies", { method: "POST", body: JSON.stringify({ name: $("addName").value.trim(), kind: $("addKind").value }) });
+    $("addDialog").close(); state.slug = tech.slug; await loadTechs(); selectBank(tech.slug, state.exp);
+  } catch (err) { toast(err.message); }
+});
+$("settingsBtn").addEventListener("click", async () => {
+  const r = await api("/api/resume");
+  $("resumeText").value = r.text;
+  $("companiesText").value = state.status.companies.join(", ");
+  const s = state.status;
+  $("settingsInfo").innerHTML = `AI: <b>${esc(s.ai || "not configured")}</b> · Semantic search: <b>${s.semantic ? "on (" + esc(s.embedding_model) + ")" : "off — needs a Gemini key"}</b>
+    · target ${s.questions_per_tech} questions per technology. Keys and models are set in the <code>.env</code> file.`;
+  $("settings").showModal();
+});
+$("settingsClose").addEventListener("click", () => $("settings").close());
+$("resumeSave").addEventListener("click", async () => {
+  try {
+    await api("/api/resume", { method: "PUT", body: JSON.stringify({ text: $("resumeText").value }) });
+    const companies = $("companiesText").value.split(/[,\n]/).map(c => c.trim()).filter(Boolean);
+    state.status.companies = (await api("/api/preferences", { method: "PUT", body: JSON.stringify({ companies }) })).companies;
+    toast("Settings saved"); $("settings").close();
+  }
+  catch (err) { toast(err.message); }
+});
+
+(async function init() {
+  state.status = await api("/api/status");
+  const chip = $("aiStatus");
+  chip.className = "chip " + (state.status.ai_available ? "good" : "bad");
+  chip.textContent = state.status.ai_available ? `AI: ${state.status.ai.split(",")[0]}` : "No AI key configured";
+  chip.title = state.status.ai_available ? state.status.ai : `Add ${state.status.no_key_hint}`;
+  const [slug, exp] = location.hash.slice(1).split("/");
+  state.exp = state.status.experiences.some(e => e.key === exp) ? exp : state.status.default_experience;
+  $("expSelect").innerHTML = state.status.experiences.map(e => `<option value="${e.key}" ${e.key === state.exp ? "selected" : ""}>${esc(e.label)}</option>`).join("");
+  state.slug = slug || null;
+  await loadTechs();
+  selectBank(state.techs.some(t => t.slug === slug) ? slug : null, state.exp);
+})();
+</script>
+</body>
+</html>
