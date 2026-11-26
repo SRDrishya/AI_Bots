@@ -182,3 +182,19 @@ def test_markdown_blocks_and_ordering():
 
 def test_slugify():
     assert catalog.slugify("C#") == "csharp"
+
+
+def test_build_passes_question_count(client, monkeypatch):
+    seen = {}
+
+    def fake_start(tech, experience, mode, count=None):
+        seen.update(mode=mode, count=count)
+        return {"key": "k", "state": "running"}
+
+    monkeypatch.setattr("app.main.ai.ai_available", lambda: True)
+    monkeypatch.setattr(client.app.state.builder, "start", fake_start)
+    assert client.get("/api/status").json()["question_counts"] == [25, 50, 100, 150, 200]
+    assert client.post("/api/banks/csharp/build?exp=5-7&count=50").status_code == 200
+    assert seen == {"mode": "build", "count": 50}
+    assert client.post("/api/banks/csharp/build?exp=5-7&count=2").status_code == 422      # too small
+    assert client.post("/api/banks/csharp/build?exp=5-7&count=5000").status_code == 422   # too big

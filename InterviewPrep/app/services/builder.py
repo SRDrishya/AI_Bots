@@ -314,6 +314,12 @@ async def regenerate_answer(tech: Technology, experience: Experience, question: 
     return question
 
 
+def search_rounds_for(wanted: int, mode: str) -> int:
+    """Bigger requests search more rounds (each round reads up to MAX_PAGES_PER_ROUND new pages)."""
+    base = MAX_SEARCH_ROUNDS if mode == "build" else 2
+    return max(base, min(10, math.ceil(wanted / 25)))
+
+
 # ---------- job runner ----------
 
 class BankBuilder:
@@ -329,16 +335,19 @@ class BankBuilder:
     def is_running(self, key: str) -> bool:
         return self.status(key).state == "running"
 
-    def start(self, tech: Technology, experience: Experience, mode: str) -> JobStatus:
+    def start(self, tech: Technology, experience: Experience, mode: str, count: int | None = None) -> JobStatus:
+        """count: how many new questions this run should add (default: QUESTIONS_PER_TECH for a build,
+        MORE_QUESTIONS for 'find more')."""
         key = bank_key(tech.slug, experience.key)
         if self.is_running(key):
             return self.jobs[key]
         job = JobStatus(key=key, mode=mode, state="running", stage="Starting", started_at=now_iso())
         self.jobs[key] = job
-        self._tasks[key] = asyncio.create_task(self._run(tech, experience, mode, job))
+        self._tasks[key] = asyncio.create_task(self._run(tech, experience, mode, job, count))
         return job
 
-    async def _run(self, tech: Technology, experience: Experience, mode: str, job: JobStatus) -> None:
+    async def _run(self, tech: Technology, experience: Experience, mode: str, job: JobStatus,
+                   count: int | None = None) -> None:
         key = job.key
         try:
             bank = None if mode == "build" else self.storage.load_bank(key)
@@ -347,11 +356,11 @@ class BankBuilder:
                 await self._forget_vectors(key)
             bank.name, bank.kind = tech.name, tech.kind
             bank.warnings = []  # notes describe the latest run only
-            wanted = get_env_settings().questions_per_tech if mode == "build" else MORE_QUESTIONS
+            wanted = count or (get_env_settings().questions_per_tech if mode == "build" else MORE_QUESTIONS)
             if mode in ("build", "more") and ai.uses_claude_code():
                 await self._generate(tech, experience, bank, wanted, job)  # no web search in this mode
             elif mode in ("build", "more"):
-                await self._collect(tech, experience, bank, wanted, job, MAX_SEARCH_ROUNDS if mode == "build" else 2)
+                await self._collect(tech, experience, bank, wanted, job, search_rounds_for(wanted, mode))
             await self._answer_missing(tech, experience, bank, job)
             missing = sum(1 for q in bank.questions if q.answer is None)
             job.state, job.stage = "done", "Done"

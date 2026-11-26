@@ -40,6 +40,8 @@ from app.services.vectors import EmbeddingError, QuestionIndex
 log = logging.getLogger(__name__)
 STATIC_DIR = BASE_DIR / "static"
 BUILD_MODES = ("build", "more", "answers")
+QUESTION_COUNTS = (25, 50, 100, 150, 200)   # choices in the UI
+MAX_QUESTIONS_PER_RUN = 300
 EXPORT_TYPES = {"pdf": "application/pdf", "html": "text/html; charset=utf-8",
                 "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
 
@@ -127,7 +129,8 @@ Exp = Query(DEFAULT_EXPERIENCE, alias="exp")
 
 @app.get("/", include_in_schema=False)
 async def index():
-    return FileResponse(STATIC_DIR / "index.html")
+    # no-cache: the browser re-checks the page every time, so UI updates show up on a normal refresh
+    return FileResponse(STATIC_DIR / "index.html", headers={"Cache-Control": "no-cache"})
 
 
 # ---------- status & resume ----------
@@ -141,6 +144,7 @@ async def status(request: Request):
         "resume_chars": len(_storage(request).load_resume()), "questions_per_tech": env.questions_per_tech,
         "experiences": [{"key": e.key, "label": e.label} for e in EXPERIENCE_LEVELS],
         "default_experience": DEFAULT_EXPERIENCE,
+        "question_counts": list(QUESTION_COUNTS),
         "companies": _storage(request).load_companies(),
         "provider": ai.mode(),
         "providers": [{"key": k, "label": v} for k, v in ai.MODES.items()],
@@ -246,14 +250,16 @@ async def get_bank(slug: str, request: Request, exp: str = Exp):
 
 
 @app.post("/api/banks/{slug}/build")
-async def build_bank(slug: str, request: Request, exp: str = Exp, mode: str = Query("build")):
+async def build_bank(slug: str, request: Request, exp: str = Exp, mode: str = Query("build"),
+                     count: int | None = Query(None, ge=5, le=MAX_QUESTIONS_PER_RUN)):
+    """count: how many new questions this run adds (the "Questions" selector in the UI)."""
     if mode not in BUILD_MODES:
         raise HTTPException(400, f"mode must be one of {', '.join(BUILD_MODES)}")
     _require_ai()
     tech, experience, key = _resolve(request, slug, exp)
     if mode != "build":
         _bank_or_404(_storage(request), key)
-    return _builder(request).start(tech, experience, mode)
+    return _builder(request).start(tech, experience, mode, count if mode != "answers" else None)
 
 
 @app.get("/api/jobs/{slug}")

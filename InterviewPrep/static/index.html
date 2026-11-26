@@ -114,6 +114,8 @@
     <span class="muted" style="align-self:flex-end;padding-bottom:6px">or</span>
     <div class="field"><label for="techSelect">Technology</label><select id="techSelect"></select></div>
     <div class="field"><label for="expSelect">Experience</label><select id="expSelect"></select></div>
+    <div class="field" title="How many new questions each run adds (first run and 'Find more')">
+      <label for="qCount">Questions per run</label><select id="qCount"></select></div>
     <button class="btn" id="addTechBtn" title="Add a role or technology that isn't in the lists" style="align-self:flex-end">+ Add</button>
     <span class="grow"></span>
     <span id="aiStatus" class="chip"></span>
@@ -289,9 +291,20 @@ function watchJob() {
     }
   }, 2500);
 }
+// "Questions" selector: how many new questions a build / "find more" run adds (remembered in this browser)
+function questionCount() {
+  const saved = parseInt(localStorage.getItem("questionCount") || "", 10);
+  return state.status.question_counts.includes(saved) ? saved : state.status.questions_per_tech;
+}
+function fillCountSelect() {  // lives in the top bar, so it's visible before a role / technology is picked
+  const counts = [...new Set([...state.status.question_counts, state.status.questions_per_tech])].sort((a, b) => a - b);
+  $("qCount").innerHTML = counts.map(n => `<option value="${n}" ${n === questionCount() ? "selected" : ""}>${n}</option>`).join("");
+}
+$("qCount").addEventListener("change", (e) => { localStorage.setItem("questionCount", e.target.value); render(); });
 async function startBuild(mode) {
   try {
-    state.job = await api(bankUrl(`/build?mode=${mode}`), { method: "POST" });
+    const count = mode === "answers" ? "" : `&count=${questionCount()}`;
+    state.job = await api(bankUrl(`/build?mode=${mode}${count}`), { method: "POST" });
     await loadTechs(); render(); watchJob();
   } catch (err) { toast(err.message); }
 }
@@ -330,9 +343,9 @@ function render() {
   const main = $("main"), tech = currentTech();
   if (!tech) {
     main.innerHTML = `<div class="empty"><h2>Choose a role or a technology, and your experience</h2>
-      <p>Questions are collected only from real web pages: interview-prep sites, blogs and posts where candidates share
-      what they were asked. The AI copies the questions, checks each one is really on the page, and writes answers
-      pitched at the experience level you pick.</p></div>`;
+      <p>${claudeCodeMode()
+        ? "Provider is <b>Claude Code</b>: it writes the most commonly asked questions (marked 🤖 AI-generated) and answers pitched at the experience level you pick. Switch the provider in ⚙ Settings to collect real questions from the web."
+        : "Questions are collected only from real web pages: interview-prep sites, blogs and posts where candidates share what they were asked. The AI copies the questions, checks each one is really on the page, and writes answers pitched at the experience level you pick."}</p></div>`;
     return;
   }
   const bank = state.bank, job = state.job || {}, running = job.state === "running";
@@ -359,7 +372,7 @@ function render() {
         </div>
         <div class="row" style="justify-content:flex-end">
           ${!bank ? `<button class="btn primary" data-act="build" ${dis}>${claudeCodeMode() ? "✨ Generate questions with Claude Code" : "🔎 Collect questions from the web"}</button>` : `
-            <button class="btn" data-act="more" ${dis}>➕ Find more questions</button>
+            <button class="btn" data-act="more" ${dis}>➕ Find ${questionCount()} more questions</button>
             ${answered < qs.length ? `<button class="btn" data-act="answers" ${dis}>✍ Fill missing answers</button>` : ""}
             <button class="btn" data-act="rebuild" ${dis}>↻ Start over</button>
             <button class="btn danger" data-act="deleteBank" ${dis}>Delete questions</button>`}
@@ -376,7 +389,7 @@ function render() {
     ${bank && bank.warnings.length ? `<details class="notes"><summary>Notes from the last run (${bank.warnings.length})</summary>
         <ul>${bank.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></details>` : ""}
     ${bank ? renderBankArea() : (running ? "" : `<div class="empty">No questions yet for <b>${esc(tech.name)}</b> at <b>${esc(expLabel())}</b>.
-        Click <b>${claudeCodeMode() ? "Generate questions with Claude Code" : "Collect questions from the web"}</b> (target: about ${state.status.questions_per_tech}).
+        Click <b>${claudeCodeMode() ? "Generate questions with Claude Code" : "Collect questions from the web"}</b> (target: about ${questionCount()} questions; change it with <b>Questions per run</b> at the top).
         ${claudeCodeMode() ? "<br>Provider is <b>Claude Code</b>: questions will be AI-generated (change it in ⚙ Settings to collect real ones)." : ""}</div>`)}`;
 }
 
@@ -702,6 +715,7 @@ const claudeCodeMode = () => state.status && state.status.provider === "claude_c
   const [slug, exp] = location.hash.slice(1).split("/");
   state.exp = state.status.experiences.some(e => e.key === exp) ? exp : state.status.default_experience;
   $("expSelect").innerHTML = state.status.experiences.map(e => `<option value="${e.key}" ${e.key === state.exp ? "selected" : ""}>${esc(e.label)}</option>`).join("");
+  fillCountSelect();
   state.slug = slug || null;
   await loadTechs();
   selectBank(state.techs.some(t => t.slug === slug) ? slug : null, state.exp);

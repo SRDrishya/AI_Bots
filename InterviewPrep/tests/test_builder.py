@@ -347,3 +347,23 @@ async def test_claude_code_more_avoids_repeating_existing_questions(storage, mon
     await run_job(b, tech, "more")
     more_prompts = [p for p in fake.prompts if "MOST COMMONLY asked" in p][-2:]
     assert any(first in p for p in more_prompts)               # existing questions listed as "do not repeat"
+
+
+async def test_question_count_per_run(storage, fake_web):
+    b = builder.BankBuilder(storage)
+    tech = find(DEFAULT_TECHNOLOGIES, "ado-net")
+    job = b.start(tech, EXP, "build", count=10)
+    await b._tasks[job.key]
+    assert job.state == "done", job.message
+    first = len(storage.load_bank("ado-net--5-7").questions)
+    assert 10 <= first <= 12                                    # 10 requested, at most 20% over
+    job = b.start(tech, EXP, "more", count=15)
+    await b._tasks[job.key]
+    assert 15 <= len(storage.load_bank("ado-net--5-7").questions) - first <= 18
+
+
+def test_bigger_requests_search_more_rounds():
+    assert builder.search_rounds_for(50, "build") == builder.MAX_SEARCH_ROUNDS
+    assert builder.search_rounds_for(200, "build") == 8
+    assert builder.search_rounds_for(25, "more") == 2
+    assert builder.search_rounds_for(1000, "build") == 10      # capped

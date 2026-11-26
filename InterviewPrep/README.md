@@ -96,7 +96,9 @@ Open <http://127.0.0.1:8010>. Your resume text is imported from `../JobSearchAge
 
 ## Using it
 
-1. Pick a **Technology** and an **Experience** level at the top.
+1. Pick a **Role** (a whole interview) or a **Technology**, and an **Experience** level, at the top.
+   Choose how many questions to add per run with the **Questions** selector (25 / 50 / 100 / 150 / 200);
+   it applies to the first run and to **Find more questions**.
 2. Click **Collect questions from the web**. A full run takes several minutes, and questions appear as they're found.
 3. In **Browse & review**, read every question and answer. Filter by category, level or status, and search by text or by meaning. Mark each one *I know this* or *Review later*, regenerate weak answers, and delete ones you don't want.
 4. Tick the questions you want, or use **Select all shown**. Then click **Review & export…**, check the list, pick **PDF / DOCX / HTML**, and click **Confirm & generate**.
