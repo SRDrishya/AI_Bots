@@ -173,7 +173,8 @@ class SearchScheduler:
                 state.last_new_count = response.new_count
                 state.last_total = response.total_returned
                 state.last_message = (f"{response.new_count} new of {response.total_returned} matches"
-                                      + (f" ({trigger})" if trigger != "scheduled" else ""))
+                                      + (f" ({trigger})" if trigger != "scheduled" else "")
+                                      + (f" · {response.email_notice}" if response.email_notice else ""))
                 log.info("Scheduled search: %s", state.last_message)
             state.last_email_message = await self._scan_emails()
             self._save(state=state)

@@ -77,6 +77,14 @@ class EnvSettings:
     microsoft_oauth_client_id: str
     microsoft_oauth_client_secret: str
     email_oauth_redirect_base: str
+    # New-jobs email after each search (SMTP). Off unless SMTP_HOST and NOTIFY_EMAIL_TO are set.
+    smtp_host: str
+    smtp_port: int
+    smtp_user: str
+    smtp_password: str
+    smtp_from: str
+    notify_email_to: list[str]
+    notify_send_empty: bool
     host: str
     port: int
     data_dir: Path
@@ -115,6 +123,13 @@ def get_env_settings() -> EnvSettings:
         microsoft_oauth_client_id=os.getenv("MICROSOFT_OAUTH_CLIENT_ID", "").strip(),
         microsoft_oauth_client_secret=os.getenv("MICROSOFT_OAUTH_CLIENT_SECRET", "").strip(),
         email_oauth_redirect_base=email_redirect_base or f"http://127.0.0.1:{port}",
+        smtp_host=os.getenv("SMTP_HOST", "").strip(),
+        smtp_port=int(os.getenv("SMTP_PORT", "587").strip() or "587"),
+        smtp_user=os.getenv("SMTP_USER", "").strip(),
+        smtp_password=os.getenv("SMTP_PASSWORD", "").strip().replace(" ", ""),  # Gmail shows app passwords with spaces
+        smtp_from=os.getenv("SMTP_FROM", "").strip(),
+        notify_email_to=[a.strip() for a in os.getenv("NOTIFY_EMAIL_TO", "").split(",") if a.strip()],
+        notify_send_empty=os.getenv("NOTIFY_SEND_EMPTY", "").strip().lower() in ("1", "true", "yes", "on"),
         host=os.getenv("HOST", "127.0.0.1").strip() or "127.0.0.1",
         port=port,
         data_dir=Path(os.getenv("DATA_DIR", "").strip() or BASE_DIR / "data"),

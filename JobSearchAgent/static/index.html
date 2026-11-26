@@ -553,6 +553,7 @@ async function runSearch() {
     setView("latest");
     renderResults();
     loadStatus();
+    if (resp.email_notice) toast(resp.email_notice, resp.email_notice.startsWith("Email failed"));
   } catch (e) { toast(e.message, true); clear($("#results-head")); }
   finally { btn.disabled = !state.profile; btn.textContent = "Search now"; }
 }

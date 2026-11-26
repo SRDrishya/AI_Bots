@@ -188,6 +188,12 @@ closing it (or pressing `Ctrl+C`) stops the server.
   was first seen, and every apply link. **Export Excel / CSV** works on the combined list too.
 - History keeps the **last 20 searches** (about 20 days of daily runs); jobs in the *Tracker* are kept
   permanently.
+- **New-jobs email (optional):** set `SMTP_HOST`, `SMTP_USER`, `SMTP_PASSWORD` and `NOTIFY_EMAIL_TO`
+  in `.env` (see `.env.example`; for Gmail use an *App Password*) and restart. After every search —
+  daily or manual — you get an email listing the jobs that are new compared with earlier runs (the
+  ones marked **NEW**), best match first, with apply links. Runs with nothing new send no email
+  unless `NOTIFY_SEND_EMPTY=true`. If sending fails, the search still completes and the error is
+  shown on *Schedule & sources* (or as a message after a manual search).
 
 **Quota:** one search uses 3 JSearch calls and 3 SerpAPI calls — a daily search uses about 93 of each
 per month, within the free tiers. The app reads the remaining quota from the providers (shown in the

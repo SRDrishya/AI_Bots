@@ -2,7 +2,7 @@
 
 fetch (all sources, concurrent) -> refine (location filter + de-dup)
 -> score (local + Gemini top-N) -> annotate (new / tracked, hide dismissed)
--> cap to max_results -> mark seen -> save to history
+-> cap to max_results -> mark seen -> save to history -> email the new jobs
 """
 from __future__ import annotations
 
@@ -11,6 +11,7 @@ from typing import Literal
 
 from app.models import SearchRequest, SearchResponse
 from app.services.filtering import refine_jobs
+from app.services.notify import notify_new_jobs
 from app.services.scoring import score_jobs
 from app.services.storage import Storage, get_storage
 from app.sources import build_context, fetch_all
@@ -54,4 +55,6 @@ async def run_search(
     summary = storage.save_search(response, location=request.location, queries=ctx.queries, trigger=trigger)
     log.info("Search %s: %d fetched -> %d shown (%d new), engine=%s",
              summary.id, len(raw_jobs), len(shown), response.new_count, scored.engine)
-    return response.model_copy(update={"search_id": summary.id})
+    response = response.model_copy(update={"search_id": summary.id})
+    notice = await notify_new_jobs(response, trigger=trigger, location=request.location)
+    return response.model_copy(update={"email_notice": notice})

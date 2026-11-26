@@ -177,6 +177,7 @@ class SearchResponse(BaseModel):
     jobs: list[ScoredJob]
     search_id: str = ""                    # set once the search is saved
     new_count: int = 0
+    email_notice: str = ""                 # result of the new-jobs email ("" = email not configured)
 
 
 class StoredSearch(BaseModel):
