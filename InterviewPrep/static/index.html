@@ -28,7 +28,8 @@
   .brand { font-weight: 700; font-size: 16px; margin-right: 6px; }
   .field { display: flex; flex-direction: column; gap: 2px; }
   .field label { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; }
-  #techSelect { min-width: 290px; }
+  #techSelect { min-width: 260px; }
+  #roleSelect { min-width: 250px; }
   main { max-width: 1180px; margin: 0 auto; padding: 20px; }
   .grow { flex: 1; }
   .chip { display: inline-flex; align-items: center; gap: 4px; padding: 0 8px; border-radius: 999px; font-size: 12px;
@@ -109,9 +110,11 @@
 <header>
   <div class="bar">
     <span class="brand">🎯 InterviewPrep</span>
+    <div class="field"><label for="roleSelect">Role</label><select id="roleSelect"></select></div>
+    <span class="muted" style="align-self:flex-end;padding-bottom:6px">or</span>
     <div class="field"><label for="techSelect">Technology</label><select id="techSelect"></select></div>
     <div class="field"><label for="expSelect">Experience</label><select id="expSelect"></select></div>
-    <button class="btn" id="addTechBtn" title="Add a technology that isn't in the list" style="align-self:flex-end">+ Add</button>
+    <button class="btn" id="addTechBtn" title="Add a role or technology that isn't in the lists" style="align-self:flex-end">+ Add</button>
     <span class="grow"></span>
     <span id="aiStatus" class="chip"></span>
     <button class="btn" id="settingsBtn">⚙ Settings</button>
@@ -141,12 +144,13 @@
 </dialog>
 
 <dialog id="addDialog">
-  <h2 style="margin-top:0">Add a technology</h2>
+  <h2 style="margin-top:0">Add a role or technology</h2>
   <form id="addForm">
     <div class="row">
-      <input type="text" id="addName" placeholder="e.g. Docker, Kafka, Redis" style="flex:1" maxlength="80" required>
+      <input type="text" id="addName" placeholder="e.g. Docker, Kafka, or Senior Backend Engineer" style="flex:1" maxlength="80" required>
       <select id="addKind">
-        <option value="tech">Technology</option><option value="design">Design / architecture</option>
+        <option value="tech">Technology</option><option value="role">Role (whole interview)</option>
+        <option value="design">Design / architecture</option>
         <option value="ai">AI</option><option value="behavioral">Behavioral</option>
       </select>
     </div>
@@ -160,6 +164,9 @@
 <dialog id="settings">
   <h2 style="margin-top:0">Settings</h2>
   <p class="muted" id="settingsInfo"></p>
+  <label class="sec-title" for="providerSelect">AI provider</label>
+  <div class="row" style="margin:4px 0 2px"><select id="providerSelect" style="min-width:320px"></select></div>
+  <p class="muted" id="providerHelp" style="margin:2px 0 10px"></p>
   <label class="sec-title" for="resumeText">Resume text</label>
   <p class="muted" style="margin:2px 0 6px">Used for behavioral STAR answers and the “Your angle” notes.
     Imported from JobSearchAgent on first start; paste a new version any time.</p>
@@ -238,13 +245,17 @@ const byId = (id) => state.bank && state.bank.questions.find(q => q.id === id);
 // ---------- dropdowns ----------
 async function loadTechs() {
   state.techs = await api(`/api/technologies?exp=${state.exp}`);
+  const option = (t) => `<option value="${t.slug}" ${t.slug === state.slug ? "selected" : ""}>${esc(t.name)}${t.count ? ` (${t.count})` : ""}${t.job.state === "running" ? " ⏳" : ""}</option>`;
+  // Roles (a whole job interview) and technologies (one skill) are separate dropdowns; picking one clears the other.
+  const roles = state.techs.filter(t => t.kind === "role");
+  $("roleSelect").innerHTML = `<option value="">— Choose a role —</option>` + roles.map(option).join("");
   const groups = {};
-  for (const t of state.techs) (groups[t.group] = groups[t.group] || []).push(t);
+  for (const t of state.techs.filter(t => t.kind !== "role")) (groups[t.group] = groups[t.group] || []).push(t);
   $("techSelect").innerHTML = `<option value="">— Choose a technology —</option>` +
-    Object.entries(groups).map(([g, items]) => `<optgroup label="${esc(g)}">${items.map(t =>
-      `<option value="${t.slug}" ${t.slug === state.slug ? "selected" : ""}>${esc(t.name)}${t.count ? ` (${t.count})` : ""}${t.job.state === "running" ? " ⏳" : ""}</option>`).join("")}</optgroup>`).join("");
+    Object.entries(groups).map(([g, items]) => `<optgroup label="${esc(g)}">${items.map(option).join("")}</optgroup>`).join("");
 }
-$("techSelect").addEventListener("change", (e) => selectBank(e.target.value, state.exp));
+$("roleSelect").addEventListener("change", (e) => { $("techSelect").value = ""; selectBank(e.target.value, state.exp); });
+$("techSelect").addEventListener("change", (e) => { $("roleSelect").value = ""; selectBank(e.target.value, state.exp); });
 $("expSelect").addEventListener("change", async (e) => { state.exp = e.target.value; await loadTechs(); selectBank(state.slug, state.exp); });
 
 function saveHash() { location.hash = state.slug ? `${state.slug}/${state.exp}` : ""; }
@@ -318,7 +329,7 @@ async function semanticSearch() {
 function render() {
   const main = $("main"), tech = currentTech();
   if (!tech) {
-    main.innerHTML = `<div class="empty"><h2>Choose a technology and your experience</h2>
+    main.innerHTML = `<div class="empty"><h2>Choose a role or a technology, and your experience</h2>
       <p>Questions are collected only from real web pages: interview-prep sites, blogs and posts where candidates share
       what they were asked. The AI copies the questions, checks each one is really on the page, and writes answers
       pitched at the experience level you pick.</p></div>`;
@@ -347,7 +358,7 @@ function render() {
           </div>
         </div>
         <div class="row" style="justify-content:flex-end">
-          ${!bank ? `<button class="btn primary" data-act="build" ${dis}>🔎 Collect questions from the web</button>` : `
+          ${!bank ? `<button class="btn primary" data-act="build" ${dis}>${claudeCodeMode() ? "✨ Generate questions with Claude Code" : "🔎 Collect questions from the web"}</button>` : `
             <button class="btn" data-act="more" ${dis}>➕ Find more questions</button>
             ${answered < qs.length ? `<button class="btn" data-act="answers" ${dis}>✍ Fill missing answers</button>` : ""}
             <button class="btn" data-act="rebuild" ${dis}>↻ Start over</button>
@@ -358,13 +369,15 @@ function render() {
       ${running ? `<div style="margin-top:12px"><b>${esc(job.stage)}</b> <span class="muted">${job.total ? `${job.done} / ${job.total}` : ""}
           ${job.message ? " · " + esc(job.message) : ""}</span>
           <div class="progress"><div style="width:${pct}%"></div></div>
-          <div class="muted" style="font-size:12px">This searches the web, reads each page and writes answers, so it takes several minutes. Questions appear here as they are found.</div></div>` : ""}
+          <div class="muted" style="font-size:12px">${claudeCodeMode() ? "Claude Code is writing questions and answers in a few large batches; this takes several minutes."
+            : "This searches the web, reads each page and writes answers, so it takes several minutes. Questions appear here as they are found."}</div></div>` : ""}
       ${job.state === "error" ? `<div class="error" style="margin:12px 0 0">Last run failed: ${esc(job.message)}</div>` : ""}
     </div>
     ${bank && bank.warnings.length ? `<details class="notes"><summary>Notes from the last run (${bank.warnings.length})</summary>
         <ul>${bank.warnings.map(w => `<li>${esc(w)}</li>`).join("")}</ul></details>` : ""}
     ${bank ? renderBankArea() : (running ? "" : `<div class="empty">No questions yet for <b>${esc(tech.name)}</b> at <b>${esc(expLabel())}</b>.
-        Click <b>Collect questions from the web</b> (target: about ${state.status.questions_per_tech}).</div>`)}`;
+        Click <b>${claudeCodeMode() ? "Generate questions with Claude Code" : "Collect questions from the web"}</b> (target: about ${state.status.questions_per_tech}).
+        ${claudeCodeMode() ? "<br>Provider is <b>Claude Code</b>: questions will be AI-generated (change it in ⚙ Settings to collect real ones)." : ""}</div>`)}`;
 }
 
 function renderBankArea() {
@@ -418,7 +431,8 @@ function relatedHtml(q) {
 function chips(q) {
   const st = statusOf(q);
   const sites = siteCount(q);
-  return `${q.reported ? `<span class="chip good" title="A candidate reported being asked this in a real interview">🎤 real interview${q.companies.length ? ": " + esc(q.companies.slice(0, 3).join(", ")) : ""}</span>`
+  return `${q.origin === "ai" ? `<span class="chip" title="Written by Claude Code, not collected from a real interview report">🤖 AI-generated</span>` : ""}
+    ${q.reported ? `<span class="chip good" title="A candidate reported being asked this in a real interview">🎤 real interview${q.companies.length ? ": " + esc(q.companies.slice(0, 3).join(", ")) : ""}</span>`
       : q.companies.length ? `<span class="chip">🏢 ${esc(q.companies.slice(0, 3).join(", "))}</span>` : ""}
     ${sites > 1 ? `<span class="chip warn" title="Found on ${sites} different sites">🔥 ${sites} sites</span>` : ""}
     <span class="chip ${LEVEL_CLASS[q.level]}">${LEVELS[q.level]}</span>
@@ -641,27 +655,50 @@ $("settingsBtn").addEventListener("click", async () => {
   $("resumeText").value = r.text;
   $("companiesText").value = state.status.companies.join(", ");
   const s = state.status;
+  $("providerSelect").innerHTML = s.providers.map(p => `<option value="${p.key}" ${p.key === s.provider ? "selected" : ""}
+    ${p.key === "claude_code" && !s.claude_code_path ? "disabled" : ""}>${esc(p.label)}${p.key === "claude_code" && !s.claude_code_path ? " — not installed" : ""}</option>`).join("");
+  showProviderHelp();
   $("settingsInfo").innerHTML = `AI: <b>${esc(s.ai || "not configured")}</b> · Semantic search: <b>${s.semantic ? "on (" + esc(s.embedding_model) + ")" : "off — needs a Gemini key"}</b>
     · target ${s.questions_per_tech} questions per technology. Keys and models are set in the <code>.env</code> file.`;
   $("settings").showModal();
 });
+const PROVIDER_HELP = {
+  auto: "Questions are collected from real interview reports on the web. Gemini is used first and the Claude API when Gemini is out of quota.",
+  gemini: "Questions are collected from real interview reports on the web, using Gemini only.",
+  anthropic: "Questions are collected from real interview reports on the web, using the Claude API only (needs API credit).",
+  claude_code: "Uses your Claude subscription through Claude Code: no API credits needed. Claude Code writes the questions " +
+    "(marked 🤖 AI-generated, not collected from the web) and the answers for your experience level.",
+};
+function showProviderHelp() {
+  const key = $("providerSelect").value;
+  $("providerHelp").textContent = PROVIDER_HELP[key] || "";
+  if (key === "claude_code" && state.status.claude_code_path) $("providerHelp").textContent += ` (Found: ${state.status.claude_code_path})`;
+}
+$("providerSelect").addEventListener("change", showProviderHelp);
 $("settingsClose").addEventListener("click", () => $("settings").close());
 $("resumeSave").addEventListener("click", async () => {
   try {
     await api("/api/resume", { method: "PUT", body: JSON.stringify({ text: $("resumeText").value }) });
     const companies = $("companiesText").value.split(/[,\n]/).map(c => c.trim()).filter(Boolean);
-    state.status.companies = (await api("/api/preferences", { method: "PUT", body: JSON.stringify({ companies }) })).companies;
+    const prefs = await api("/api/preferences", { method: "PUT", body: JSON.stringify({ companies, provider: $("providerSelect").value }) });
+    state.status.companies = prefs.companies;
+    await loadStatus(); render();
     toast("Settings saved"); $("settings").close();
   }
   catch (err) { toast(err.message); }
 });
 
-(async function init() {
+async function loadStatus() {
   state.status = await api("/api/status");
   const chip = $("aiStatus");
   chip.className = "chip " + (state.status.ai_available ? "good" : "bad");
-  chip.textContent = state.status.ai_available ? `AI: ${state.status.ai.split(",")[0]}` : "No AI key configured";
+  chip.textContent = state.status.ai_available ? `AI: ${state.status.ai.split(",")[0]}` : "No AI provider available";
   chip.title = state.status.ai_available ? state.status.ai : `Add ${state.status.no_key_hint}`;
+}
+const claudeCodeMode = () => state.status && state.status.provider === "claude_code";
+
+(async function init() {
+  await loadStatus();
   const [slug, exp] = location.hash.slice(1).split("/");
   state.exp = state.status.experiences.some(e => e.key === exp) ? exp : state.status.default_experience;
   $("expSelect").innerHTML = state.status.experiences.map(e => `<option value="${e.key}" ${e.key === state.exp ? "selected" : ""}>${esc(e.label)}</option>`).join("");

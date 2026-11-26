@@ -40,6 +40,7 @@ from app.models import (
     Bank,
     CategoryPlan,
     ExtractedQuestions,
+    GeneratedQuestions,
     JobStatus,
     Question,
     SameQuestionVerdicts,
@@ -56,6 +57,8 @@ from app.services.vectors import EmbeddingError, QuestionIndex
 log = logging.getLogger(__name__)
 
 MORE_QUESTIONS = 25
+CATEGORIES_PER_CALL = 3        # Claude Code mode: categories written per call
+CLAUDE_CODE_ANSWER_BATCH = 8   # Claude Code mode: answers per call (each call has a fixed start-up cost)
 MAX_SOURCES = 8               # source links kept per question
 MAX_PER_PAGE = 6              # new questions one page contributes before other pages get their turn
 # Sites made of candidates' own interview reports (not prep articles)
@@ -129,7 +132,8 @@ def likelihood(q: Question) -> float:
     hosts = {_host(s.url) for s in q.sources}
     from_report_site = any(h == site or h.endswith("." + site) for h in hosts for site in REPORT_SITES)
     return round((3.0 if q.reported else 0.0) + (1.0 if from_report_site else 0.0) + min(len(q.companies), 3)
-                 + 1.5 * min(max(len(hosts) - 1, 0), 4) + (1.0 if q.fits_experience else 0.0), 2)
+                 + 1.5 * min(max(len(hosts) - 1, 0), 4) + (1.0 if q.fits_experience else 0.0)
+                 + q.commonness, 2)  # commonness: AI-generated questions only (the AI's 1-5 estimate)
 
 
 def spread_by_page(questions: list[Question], per_page: int) -> list[Question]:
@@ -343,11 +347,11 @@ class BankBuilder:
                 await self._forget_vectors(key)
             bank.name, bank.kind = tech.name, tech.kind
             bank.warnings = []  # notes describe the latest run only
-            if mode == "build":
-                await self._collect(tech, experience, bank, get_env_settings().questions_per_tech, job,
-                                    MAX_SEARCH_ROUNDS)
-            elif mode == "more":
-                await self._collect(tech, experience, bank, MORE_QUESTIONS, job, 2)
+            wanted = get_env_settings().questions_per_tech if mode == "build" else MORE_QUESTIONS
+            if mode in ("build", "more") and ai.uses_claude_code():
+                await self._generate(tech, experience, bank, wanted, job)  # no web search in this mode
+            elif mode in ("build", "more"):
+                await self._collect(tech, experience, bank, wanted, job, MAX_SEARCH_ROUNDS if mode == "build" else 2)
             await self._answer_missing(tech, experience, bank, job)
             missing = sum(1 for q in bank.questions if q.answer is None)
             job.state, job.stage = "done", "Done"
@@ -456,12 +460,67 @@ class BankBuilder:
         if added == 0:
             raise AIError("No new questions were found on the pages searched — see the notes for details")
 
+    async def _generate(self, tech: Technology, experience: Experience, bank: Bank, wanted: int,
+                        job: JobStatus) -> None:
+        """Claude Code mode: Claude Code writes the questions (marked AI-generated), a few categories per call."""
+        if not bank.categories:
+            job.stage = "Planning categories"
+            bank.categories = await plan_categories(tech, experience, wanted)
+        categories = [c for c in bank.categories if c != "Other"] or bank.categories
+        start_count = len(bank.questions)
+        per_category = max(3, math.ceil(wanted * 1.15 / len(categories)))
+        groups = [categories[i:i + CATEGORIES_PER_CALL] for i in range(0, len(categories), CATEGORIES_PER_CALL)]
+        companies = self.storage.load_companies()
+        job.stage, job.done, job.total = "Claude Code is writing interview questions", 0, len(groups)
+        semaphore = asyncio.Semaphore(AI_CONCURRENCY)
+        errors: list[str] = []
+
+        async def one(group: list[str]) -> list[Question]:
+            async with semaphore:
+                existing = {c: [q.question for q in bank.questions if q.category == c] for c in group}
+                try:
+                    result = await ai.generate_json(
+                        prompt=prompts.generate_questions(tech, experience, group, per_category, existing, companies),
+                        schema=GeneratedQuestions, temperature=0.5)
+                except AIError as exc:
+                    errors.append(str(exc))
+                    return []
+                finally:
+                    job.done += 1
+            created = now_iso()
+            return [Question(id=question_id(bank.key, text), question=text,
+                             category=match_category(g.category, bank.categories), level=normalize_level(g.level),
+                             origin="ai", commonness=max(1, min(5, g.commonly_asked)), created_at=created)
+                    for g in result.questions if (text := clean_question(g.question))]
+
+        found = [q for batch in await asyncio.gather(*(one(g) for g in groups)) for q in batch]
+        found.sort(key=lambda q: -q.commonness)
+        job.stage = "Removing duplicates"
+        new, _ = await semantic_dedupe(self.index, bank.key, bank.questions, found, bank.warnings)
+        new = new[: math.ceil(wanted * MAX_OVERSHOOT)]
+        bank.questions.extend(new)
+        for q in bank.questions:
+            q.likelihood = likelihood(q)
+        if new and self.index is not None and self.index.enabled:
+            try:
+                await self.index.add(bank.key, new)
+            except EmbeddingError as exc:
+                bank.warnings.append(f"Questions were not added to the semantic index: {exc}")
+        bank.warnings.append(f"Claude Code wrote {len(new)} questions (marked 🤖 AI-generated; not collected from "
+                             "the web). Switch the provider in Settings to collect real interview questions.")
+        if errors:
+            bank.warnings.append(f"{len(errors)} of {len(groups)} question batches failed: {errors[0]}")
+        self.storage.save_bank(bank)
+        if len(bank.questions) == start_count:
+            raise AIError(errors[0] if errors else "Claude Code returned no new questions")
+
     async def _answer_missing(self, tech: Technology, experience: Experience, bank: Bank, job: JobStatus) -> None:
         pending = [q for q in bank.questions if q.answer is None]
         if not pending:
             return
         resume = self.storage.load_resume()
-        batches = [pending[i:i + ANSWER_BATCH_SIZE] for i in range(0, len(pending), ANSWER_BATCH_SIZE)]
+        size = CLAUDE_CODE_ANSWER_BATCH if ai.uses_claude_code() else ANSWER_BATCH_SIZE  # fewer, bigger calls
+        batches = [pending[i:i + size] for i in range(0, len(pending), size)]
         job.stage, job.done, job.total = f"Writing answers for {experience.label}", 0, len(pending)
         semaphore = asyncio.Semaphore(AI_CONCURRENCY)
         errors: list[str] = []

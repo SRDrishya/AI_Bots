@@ -33,6 +33,8 @@ def ordered(bank: Bank, questions: list[Question]) -> list[tuple[str, list[Quest
 
 def evidence(q: Question) -> str:
     """'Reported by candidates at Infosys, TCS · found on 3 sites' (empty when there is nothing to say)."""
+    if q.origin == "ai":
+        return "AI-generated question (Claude Code)"
     parts = []
     if q.reported:
         parts.append("Reported by candidates" + (f" at {', '.join(q.companies)}" if q.companies else ""))

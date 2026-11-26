@@ -10,6 +10,8 @@ from app.models import (
     CategoryPlan,
     ExtractedQuestion,
     ExtractedQuestions,
+    GeneratedQuestion,
+    GeneratedQuestions,
     PlannedCategory,
     Question,
     SameQuestionVerdict,
@@ -71,12 +73,19 @@ def page_text(n: int) -> str:
 
 
 class FakeAI:
-    def __init__(self, grounded_fails=False):
+    def __init__(self, grounded_fails=False, claude_code=False):
         self.grounded_fails = grounded_fails
+        self.claude_code = claude_code
         self.prompts: list[str] = []
         self.searches = 0
+        self.generated = 0
+
+    def uses_claude_code(self):
+        return self.claude_code
 
     async def generate_grounded(self, *, prompt, temperature=0.3):
+        if self.claude_code:
+            raise AssertionError("Claude Code mode must not use web search")
         if self.grounded_fails:
             raise builder.AIError("search not available")
         self.searches += 1
@@ -101,6 +110,17 @@ class FakeAI:
                                            category="Cat 2", level="advanced", fits_experience=True,
                                            reported_by_candidate=False, companies=[]))
             return ExtractedQuestions(questions=found)
+        if schema is GeneratedQuestions:
+            cats = re.search(r"for EACH of these categories: (.+?)\.\n", prompt).group(1).split(", ")
+            per_cat = int(re.search(r"Write (\d+) distinct questions", prompt).group(1))
+            items = []
+            for cat in cats:
+                for _ in range(per_cat):
+                    self.generated += 1
+                    n = self.generated
+                    items.append(GeneratedQuestion(question=f"How would you handle scenario{n} involving topic{n}?",
+                                                   category=cat, level="advanced", commonly_asked=1 + n % 5))
+            return GeneratedQuestions(questions=items)
         if schema is AnswerBatch:
             count = prompt.split("Questions:\n", 1)[1].count("\n") + 1
             return AnswerBatch(answers=[
@@ -294,3 +314,36 @@ def test_report_sites_rank_above_articles():
     report.sources = [builder.Source(title="ab", url="https://www.ambitionbox.com/interviews/x")]
     article.reported = report.reported = True
     assert builder.likelihood(report) > builder.likelihood(article)
+
+
+# ---------- Claude Code mode: AI-written questions ----------
+
+async def test_claude_code_mode_writes_labelled_questions_without_web_search(storage, monkeypatch):
+    fake = FakeAI(claude_code=True)
+    monkeypatch.setattr(builder, "ai", fake)
+    monkeypatch.setattr(gather, "ai", fake)
+    job = await run_job(builder.BankBuilder(storage), find(DEFAULT_TECHNOLOGIES, "csharp"), "build")
+    assert job.state == "done", job.message
+    bank = storage.load_bank("csharp--5-7")
+    assert 20 <= len(bank.questions) <= 24
+    assert all(x.origin == "ai" and not x.sources and x.answer for x in bank.questions)
+    assert fake.searches == 0
+    ranked = sorted(bank.questions, key=lambda x: -x.likelihood)
+    assert ranked[0].commonness >= ranked[-1].commonness      # most commonly asked first
+    assert any("AI-generated" in w for w in bank.warnings)
+    answer_calls = [p for p in fake.prompts if "Write model interview answers" in p]
+    assert len(answer_calls) == -(-len(bank.questions) // builder.CLAUDE_CODE_ANSWER_BATCH)  # bigger batches
+    question_calls = [p for p in fake.prompts if "MOST COMMONLY asked" in p]
+    assert len(question_calls) == 2                            # 6 categories, 3 per call
+
+
+async def test_claude_code_more_avoids_repeating_existing_questions(storage, monkeypatch):
+    fake = FakeAI(claude_code=True)
+    monkeypatch.setattr(builder, "ai", fake)
+    b = builder.BankBuilder(storage)
+    tech = find(DEFAULT_TECHNOLOGIES, "sql-server")
+    await run_job(b, tech, "build")
+    first = storage.load_bank("sql-server--5-7").questions[0].question
+    await run_job(b, tech, "more")
+    more_prompts = [p for p in fake.prompts if "MOST COMMONLY asked" in p][-2:]
+    assert any(first in p for p in more_prompts)               # existing questions listed as "do not repeat"

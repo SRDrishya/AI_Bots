@@ -55,6 +55,23 @@ On each question, chips show 🎤 *real interview: TCS, Infosys* and 🔥 *found
 
 Each answer has a **Your angle** note linking it to your resume. It never claims experience your resume doesn't show.
 
+## AI provider (⚙ Settings)
+
+| Provider | Questions | Answers | Needs |
+|---|---|---|---|
+| **Auto** (default) | Collected from real interview reports on the web | Gemini, falling back to the Claude API | Gemini and/or Anthropic API key |
+| Gemini only / Claude API only | Collected from the web | That provider | Its API key |
+| **Claude Code** | **Written by Claude Code**, marked **🤖 AI-generated** | Claude Code | Claude Code signed in to your Claude subscription. No API credits needed. |
+
+Choose **Claude Code** when API tokens run out. The app runs `claude -p` in headless mode and keeps each call lean:
+- no tools, MCP servers, hooks or saved sessions;
+- a short system prompt instead of Claude Code's large default one, which costs about 20× less usage per call;
+- questions and answers are batched (3 categories, or 8 answers, per call).
+
+It also removes `ANTHROPIC_API_KEY` from Claude Code's environment, so your sign-in is used instead of the API account.
+
+Questions are ranked by how commonly the AI says they come up (1–5). The Notes box and every export say they're AI-generated. Claude Code is found automatically, either on PATH or bundled with the VS Code extension. Set `CLAUDE_CODE_PATH` or `CLAUDE_CODE_MODEL` in `.env` to override. In a live test, 15 Entity Framework questions with answers took about 3.5 minutes.
+
 ## Semantic features (LangChain + Chroma)
 
 - **Search by meaning**: press Enter in the search box or click 🧠. For example, "why are my database calls slow" finds questions about connection pooling, async and batch updates.

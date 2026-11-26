@@ -5,7 +5,7 @@
     technologies.json    custom technologies added by the user
     progress.json        practice status + attempts, keyed by question id
     resume.txt           resume text used for behavioral answers and "your angle" notes
-    preferences.json     target companies whose interview reports are searched first
+    preferences.json     target companies (searched first) and the AI provider chosen in Settings
 """
 from __future__ import annotations
 
@@ -135,17 +135,33 @@ class Storage:
 
     # ---------- preferences ----------
 
+    def _preferences(self) -> dict:
+        data = self._read_json(self.data_dir / "preferences.json", {})
+        return data if isinstance(data, dict) else {}
+
+    def _save_preference(self, name: str, value) -> None:
+        with self._lock:
+            prefs = self._preferences()
+            prefs[name] = value
+            self._write(self.data_dir / "preferences.json", json.dumps(prefs, indent=1))
+
     def load_companies(self) -> list[str]:
         with self._lock:
-            data = self._read_json(self.data_dir / "preferences.json", {})
-        companies = data.get("companies") if isinstance(data, dict) else None
+            companies = self._preferences().get("companies")
         return companies if isinstance(companies, list) else list(DEFAULT_TARGET_COMPANIES)
 
     def save_companies(self, companies: list[str]) -> list[str]:
         cleaned = list(dict.fromkeys(c.strip() for c in companies if c.strip()))
-        with self._lock:
-            self._write(self.data_dir / "preferences.json", json.dumps({"companies": cleaned}, indent=1))
+        self._save_preference("companies", cleaned)
         return cleaned
+
+    def load_provider(self) -> str:
+        with self._lock:
+            provider = self._preferences().get("provider")
+        return provider if isinstance(provider, str) else "auto"
+
+    def save_provider(self, provider: str) -> None:
+        self._save_preference("provider", provider)
 
     # ---------- resume ----------
 

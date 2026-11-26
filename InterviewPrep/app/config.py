@@ -79,6 +79,7 @@ class EnvSettings:
     anthropic_fast_model: str
     ai_provider: str  # main provider; the other one (if its key is set) is the fallback
     embedding_model: str
+    claude_code_model: str   # empty = Claude Code's default model
     questions_per_tech: int
     host: str
     port: int
@@ -113,6 +114,7 @@ def get_env_settings() -> EnvSettings:
         anthropic_fast_model=os.getenv("ANTHROPIC_FAST_MODEL", "").strip() or DEFAULT_ANTHROPIC_FAST_MODEL,
         ai_provider=_ai_provider(),
         embedding_model=os.getenv("EMBEDDING_MODEL", "").strip() or DEFAULT_EMBEDDING_MODEL,
+        claude_code_model=os.getenv("CLAUDE_CODE_MODEL", "").strip(),
         questions_per_tech=max(10, _int_env("QUESTIONS_PER_TECH", DEFAULT_QUESTIONS_PER_TECH)),
         host=os.getenv("HOST", "127.0.0.1").strip() or "127.0.0.1",
         port=_int_env("PORT", 8010),

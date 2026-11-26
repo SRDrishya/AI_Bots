@@ -56,6 +56,8 @@ class Question(BaseModel):
     reported: bool = False            # a candidate reported being asked this in a real interview
     companies: list[str] = Field(default_factory=list)    # companies it was reported at
     likelihood: float = 0.0           # how likely it is to be asked (see builder.likelihood)
+    origin: Literal["web", "ai"] = "web"   # ai: written by Claude Code (no web source)
+    commonness: int = 0               # ai questions: how often it comes up, 1-5 (the AI's estimate)
     answer: Answer | None = None
     created_at: str = ""
 
@@ -148,7 +150,8 @@ class ResumeUpdate(BaseModel):
 
 
 class PreferencesUpdate(BaseModel):
-    companies: list[str] = Field(max_length=60)
+    companies: list[str] | None = Field(default=None, max_length=60)
+    provider: str | None = None       # auto | gemini | anthropic | claude_code
 
 
 # ---------- shapes asked of the AI (no defaults: Gemini schemas reject them) ----------
@@ -173,6 +176,17 @@ class ExtractedQuestion(BaseModel):
 
 class ExtractedQuestions(BaseModel):
     questions: list[ExtractedQuestion]
+
+
+class GeneratedQuestion(BaseModel):
+    question: str
+    category: str
+    level: str
+    commonly_asked: int
+
+
+class GeneratedQuestions(BaseModel):
+    questions: list[GeneratedQuestion]
 
 
 class AnswerDraft(BaseModel):

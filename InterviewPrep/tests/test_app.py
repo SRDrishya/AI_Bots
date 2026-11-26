@@ -132,6 +132,43 @@ def test_export_shows_interview_evidence(client):
     assert "Reported by candidates at Infosys, TCS · found on 2 sites" in r.text
 
 
+def test_provider_setting(client, monkeypatch, tmp_path):
+    from app.services import ai
+
+    status = client.get("/api/status").json()
+    assert status["provider"] == "auto" and {p["key"] for p in status["providers"]} >= {"auto", "claude_code"}
+    assert client.put("/api/preferences", json={"provider": "nonsense"}).status_code == 400
+    monkeypatch.setenv("CLAUDE_CODE_PATH", str(tmp_path / "missing.exe"))
+    assert client.put("/api/preferences", json={"provider": "claude_code"}).status_code == 400
+    exe = tmp_path / "claude.exe"
+    exe.write_text("")
+    monkeypatch.setenv("CLAUDE_CODE_PATH", str(exe))
+    try:
+        r = client.put("/api/preferences", json={"provider": "claude_code"}).json()
+        assert r["provider"] == "claude_code" and ai.mode() == "claude_code"
+        assert client.get("/api/status").json()["ai_available"] is True   # no API keys needed
+        assert client.app.state.storage.load_provider() == "claude_code"   # remembered across restarts
+        assert "Cognizant" in r["companies"]                               # companies untouched
+    finally:
+        ai.set_mode("auto")
+
+
+def test_custom_role_is_listed_as_a_role(client):
+    client.post("/api/technologies", json={"name": "Senior Backend Engineer", "kind": "role"})
+    techs = client.get("/api/technologies?exp=5-7").json()
+    roles = [t["name"] for t in techs if t["kind"] == "role"]
+    assert roles == ["Lead .NET Full Stack Developer", ".NET Full Stack + Gen AI Developer", "Senior Backend Engineer"]
+    assert "C#" not in roles
+
+
+def test_ai_generated_label_in_exports(client):
+    bank = sample_bank()
+    bank.questions[0].origin = "ai"
+    client.app.state.storage.save_bank(bank)
+    r = client.post("/api/banks/csharp/export?exp=5-7", json={"format": "html", "question_ids": ["csharp--5-7-1"]})
+    assert "AI-generated question (Claude Code)" in r.text
+
+
 def test_build_requires_ai_key(client):
     assert client.post("/api/banks/csharp/build?exp=5-7").status_code == 400
 

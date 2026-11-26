@@ -31,7 +31,7 @@ from app.models import (
     Technology,
     bank_key,
 )
-from app.services import ai, catalog, export, practice
+from app.services import ai, catalog, claude_code, export, practice
 from app.services.ai import NO_KEY_HINT, AIError
 from app.services.builder import BankBuilder, regenerate_answer
 from app.services.storage import Storage, now_iso
@@ -53,6 +53,7 @@ async def lifespan(app: FastAPI):
     app.state.index = index
     app.state.builder = BankBuilder(storage, index)
     storage.load_resume()  # imports the JobSearchAgent resume on first start
+    ai.set_mode(storage.load_provider())
     yield
 
 
@@ -141,6 +142,9 @@ async def status(request: Request):
         "experiences": [{"key": e.key, "label": e.label} for e in EXPERIENCE_LEVELS],
         "default_experience": DEFAULT_EXPERIENCE,
         "companies": _storage(request).load_companies(),
+        "provider": ai.mode(),
+        "providers": [{"key": k, "label": v} for k, v in ai.MODES.items()],
+        "claude_code_path": claude_code.find_executable(),
     }
 
 
@@ -157,8 +161,18 @@ async def put_resume(body: ResumeUpdate, request: Request):
 
 @app.put("/api/preferences")
 async def put_preferences(body: PreferencesUpdate, request: Request):
-    """Target companies: their candidates' interview reports are searched first."""
-    return {"companies": _storage(request).save_companies(body.companies)}
+    """Target companies (their candidates' interview reports are searched first) and the AI provider."""
+    storage = _storage(request)
+    if body.provider is not None:
+        if body.provider not in ai.MODES:
+            raise HTTPException(400, f"provider must be one of {', '.join(ai.MODES)}")
+        if body.provider == "claude_code" and not claude_code.find_executable():
+            raise HTTPException(400, "Claude Code was not found — install it, or set CLAUDE_CODE_PATH in .env")
+        storage.save_provider(body.provider)
+        ai.set_mode(body.provider)
+    if body.companies is not None:
+        storage.save_companies(body.companies)
+    return {"companies": storage.load_companies(), "provider": ai.mode()}
 
 
 # ---------- technologies ----------

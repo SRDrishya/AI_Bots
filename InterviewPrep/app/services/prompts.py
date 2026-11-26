@@ -81,6 +81,30 @@ def extract(tech: Technology, experience: Experience, categories: list[str], tex
     )
 
 
+def generate_questions(tech: Technology, experience: Experience, categories: list[str], per_category: int,
+                       existing: dict[str, list[str]], companies: list[str]) -> str:
+    """Claude Code mode: the AI writes the questions (they are labelled AI-generated in the app)."""
+    where = f" at companies like {', '.join(companies[:10])}" if companies else ""
+    role_note = (" Include the coding problems (DSA / logic programs) and HR questions these interviews really "
+                 "contain in their categories." if tech.kind == "role" else "")
+    avoid = ""
+    for cat in categories:
+        if existing.get(cat):
+            avoid += f"\nAlready in '{cat}' (do not repeat or reword):\n" + "\n".join(f"- {q}" for q in existing[cat][:60])
+    return (
+        f"You have interviewed hundreds of candidates{where}. Write the interview questions on {_topic(tech)} "
+        f"that are MOST COMMONLY asked of {candidate(experience)} in real interviews, the ones a candidate must "
+        f"be ready for to clear the interview. Pitch them at that level: {experience.expectation}. Prefer "
+        "practical, scenario-based and 'why / how would you' questions over textbook definitions, the way real "
+        f"interviewers phrase them.{role_note}\n\n"
+        f"Write {per_category} distinct questions for EACH of these categories: {', '.join(categories)}.\n"
+        "For each question return: question (one self-contained sentence), category (exactly one of the names "
+        "above), level (beginner, intermediate or advanced), commonly_asked (1-5: how often it really comes up "
+        "in interviews at this level, 5 = almost every interview).\n"
+        f"{avoid}"
+    )
+
+
 def same_questions(pairs: list[tuple[int, str, str]]) -> str:
     lines = "\n".join(f"{n}. A: {a}\n   B: {b}" for n, a, b in pairs)
     return (
